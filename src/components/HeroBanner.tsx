@@ -4,15 +4,20 @@ import { subscribeCarousels } from "@/lib/firebaseServices";
 import type { CarouselItem } from "@/data/adminData";
 import LogoLoader from "@/components/LogoLoader";
 
-const HeroBanner = () => {
+interface HeroBannerProps {
+  page?: "home" | "series" | "movies";
+  compact?: boolean;
+}
+
+const HeroBanner = ({ page = "home", compact = false }: HeroBannerProps) => {
   const [carousels, setCarousels] = useState<CarouselItem[] | null>(null);
   const [current, setCurrent] = useState(0);
 
   useEffect(() => {
     return subscribeCarousels((items) => {
-      setCarousels(items.filter(c => c.isActive));
+      setCarousels(items.filter(c => c.isActive && (!c.page || c.page === page)));
     });
-  }, []);
+  }, [page]);
 
   const slides = carousels && carousels.length > 0
     ? carousels.map(c => ({
@@ -37,7 +42,7 @@ const HeroBanner = () => {
   // Loading state
   if (carousels === null) {
     return (
-      <div className="relative w-full aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5] bg-card rounded-b-lg flex items-center justify-center">
+      <div className={`relative w-full ${compact ? "aspect-[16/5] md:aspect-[16/4]" : "aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5]"} bg-card rounded-b-lg flex items-center justify-center`}>
         <LogoLoader text="Loading banner..." />
       </div>
     );
@@ -49,7 +54,7 @@ const HeroBanner = () => {
   const slide = slides[current];
 
   return (
-    <div className="relative w-full aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5] overflow-hidden bg-card">
+    <div className={`relative w-full ${compact ? "aspect-[16/5] md:aspect-[16/4]" : "aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5]"} overflow-hidden bg-card`}>
       {slides.map((s, i) => (
         <img
           key={i}

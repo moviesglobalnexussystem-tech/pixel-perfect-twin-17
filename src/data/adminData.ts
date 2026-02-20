@@ -95,6 +95,7 @@ export interface CarouselItem {
   linkType: "series" | "episode" | "live-match" | "tv-channel" | "agent-plan" | "movie" | "live-sport" | "latest-update";
   linkId: string;
   isActive: boolean;
+  page?: "home" | "series" | "movies";
   createdAt: string;
 }
 

@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
+import HeroBanner from "@/components/HeroBanner";
 import LogoLoader from "@/components/LogoLoader";
 import { subscribeMovies } from "@/lib/firebaseServices";
 import type { MovieItem } from "@/data/adminData";
@@ -71,10 +72,7 @@ const Movies = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-4 md:px-8 py-6">
-        <h1 className="text-foreground text-xl font-bold mb-1">Movies</h1>
-        <p className="text-muted-foreground text-xs mb-4">Explore blockbuster movies and exclusives</p>
-      </div>
+      <HeroBanner page="movies" compact />
       <GenreTags />
       {dramas.length > 0 && <ContentRow title="🎬 All Movies" dramas={dramas} />}
       {popular.length > 0 && <ContentRow title="Popular Movies" dramas={popular} />}

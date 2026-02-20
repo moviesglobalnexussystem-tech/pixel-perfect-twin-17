@@ -597,6 +597,14 @@ const CarouselSection = ({ carousels, series, movies, episodes, tvChannels, late
         </div>
       )}
       {form.linkType === "live-match" && <FormField label="Match ID / Link" value={form.linkId || ""} onChange={v => setForm({ ...form, linkId: v })} />}
+      <div>
+        <label className="text-xs font-medium text-muted-foreground mb-1 block">Display On Page</label>
+        <select className="w-full h-9 rounded-lg border border-border bg-secondary text-foreground text-xs px-3" value={form.page || "home"} onChange={e => setForm({ ...form, page: e.target.value as any })}>
+          <option value="home">Home Page</option>
+          <option value="series">Series Page</option>
+          <option value="movies">Movies Page</option>
+        </select>
+      </div>
       <CheckboxField label="Active" checked={!!form.isActive} onChange={v => setForm({ ...form, isActive: v })} />
     </ContentForm>
   );
