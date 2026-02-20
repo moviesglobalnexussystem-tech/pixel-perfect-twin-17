@@ -3,6 +3,7 @@ import { subscribeTVChannels, subscribeLatestUpdates } from "@/lib/firebaseServi
 import type { TVChannelItem, LatestUpdateItem } from "@/data/adminData";
 import shaka from "shaka-player";
 import logo from "@/assets/logo.png";
+import LogoLoader from "@/components/LogoLoader";
 import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2 } from "lucide-react";
 
 interface TVPlayerProps {
@@ -250,15 +251,23 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
 
 
 const TVChannel = () => {
-  const [channels, setChannels] = useState<TVChannelItem[]>([]);
+  const [channels, setChannels] = useState<TVChannelItem[] | null>(null);
   const [activeChannel, setActiveChannel] = useState<TVChannelItem | null>(null);
   const [latestUpdates, setLatestUpdates] = useState<LatestUpdateItem[]>([]);
 
   useEffect(() => {
-    const unsub1 = subscribeTVChannels(setChannels);
+    const unsub1 = subscribeTVChannels((chs) => setChannels(chs));
     const unsub2 = subscribeLatestUpdates(setLatestUpdates);
     return () => { unsub1(); unsub2(); };
   }, []);
+
+  if (channels === null) {
+    return (
+      <div className="min-h-screen bg-background">
+        <LogoLoader text="Loading TV channels..." />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">

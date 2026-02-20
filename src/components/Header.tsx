@@ -106,7 +106,7 @@ const Header = () => {
               </div>
             ) : (
               <button onClick={() => setShowLogin(true)}
-                className="flex items-center gap-1.5 bg-secondary border border-border text-foreground hover:bg-secondary/80 text-[11px] font-medium px-3 py-1.5 rounded-full transition-colors">
+                className="flex items-center gap-1.5 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] text-[11px] font-bold px-4 py-1.5 rounded-full transition-all active:scale-95 shadow-sm">
                 <User className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Login</span>
               </button>
