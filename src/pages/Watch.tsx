@@ -412,24 +412,57 @@ const Watch = () => {
           </div>
 
           {/* Action bar */}
-          <div className="flex items-center gap-4 px-4 py-2.5 border-b border-border text-xs text-muted-foreground">
-            <button onClick={handleShare} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
-              <Share2 className="w-3.5 h-3.5" /> Share
+          <div className="flex items-center gap-2 px-4 py-3">
+            <button onClick={handleShare} className="flex-1 flex flex-col items-center gap-1 bg-card border border-border rounded-xl py-2.5 hover:bg-secondary transition-colors">
+              <Share2 className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-medium text-foreground">Share</span>
             </button>
-            <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
-              <MessageSquare className="w-3.5 h-3.5" /> Comments ({comments.length})
+            <button onClick={() => setShowComments(!showComments)} className="flex-1 flex flex-col items-center gap-1 bg-card border border-border rounded-xl py-2.5 hover:bg-secondary transition-colors">
+              <MessageSquare className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-medium text-foreground">Comments ({comments.length})</span>
             </button>
             <button onClick={() => {
               if (!user) {
                 toast({ title: "Login required", description: "Please login to download", variant: "destructive" });
                 return;
               }
-              // Check subscription - for now require login
               handleDownload();
-            }} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
-              <Download className="w-3.5 h-3.5" /> Download
+            }} className="flex-1 flex flex-col items-center gap-1 bg-card border border-border rounded-xl py-2.5 hover:bg-secondary transition-colors">
+              <Download className="w-4 h-4 text-primary" />
+              <span className="text-[10px] font-medium text-foreground">Download</span>
             </button>
           </div>
+
+          {/* Episodes Grid - Mobile only (before details) */}
+          {drama.episodes && (
+            <div className="lg:hidden px-4 pb-3">
+              <div className="bg-card border border-border rounded-xl p-3">
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="text-foreground text-xs font-semibold">Episodes</h3>
+                  <span className="text-muted-foreground text-[10px]">{episodes.length} episodes</span>
+                </div>
+                {episodes.length > 0 ? (
+                  <div className="grid grid-cols-8 gap-1.5">
+                    {episodes.map((ep) => (
+                      <button
+                        key={ep.id}
+                        onClick={() => { if (ep.streamLink) setCurrentEpisode(ep); }}
+                        className={`flex flex-col items-center justify-center rounded-lg border text-[10px] font-medium py-1.5 transition-colors
+                          ${currentEpisode?.id === ep.id
+                            ? "border-primary bg-primary/15 text-primary"
+                            : "border-border bg-secondary/40 text-foreground hover:bg-secondary"
+                          }`}
+                      >
+                        {ep.episodeNumber}
+                      </button>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-muted-foreground text-[10px] text-center py-3">No episodes available</p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Comments Section */}
           {showComments && (
@@ -553,9 +586,9 @@ const Watch = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Only for series (content with episodes) */}
+        {/* Right Sidebar - Only for series on desktop */}
         {drama.episodes && (
-          <div className="w-full lg:w-[300px] border-l border-border flex-shrink-0">
+          <div className="hidden lg:block w-[300px] border-l border-border flex-shrink-0">
             <div className="px-4 py-3 border-b border-border">
               <h2 className="text-foreground font-bold text-sm">{drama.title}</h2>
             </div>
