@@ -56,22 +56,19 @@ const DramaCard = ({ drama, showRank }: DramaCardProps) => {
   return (
     <>
       <div
-        className={`flex-shrink-0 group cursor-pointer ${showRank && rankNumber ? "flex items-end w-[160px] md:w-[195px]" : "w-[120px] md:w-[145px]"}`}
+        className={`flex-shrink-0 group cursor-pointer ${showRank && rankNumber ? "flex items-center w-[160px] md:w-[195px]" : "w-[120px] md:w-[145px]"}`}
         onClick={handleClick}
       >
-        {/* Large rank number - Netflix style */}
+        {/* Large rank number - Netflix style, vertically centered */}
         {showRank && rankNumber && (
-          <div className="relative flex-shrink-0 w-[45px] md:w-[55px] flex items-end justify-center -mr-3 z-10">
+          <div className="relative flex-shrink-0 w-[45px] md:w-[55px] flex items-center justify-center -mr-3 z-10">
             <span
               className="font-black italic leading-none select-none"
               style={{
                 fontSize: "clamp(70px, 10vw, 100px)",
-                background: `linear-gradient(180deg, hsl(var(--primary)) 0%, hsl(var(--top-gold)) 50%, hsl(var(--accent)) 100%)`,
-                WebkitBackgroundClip: "text",
+                WebkitTextStroke: "2px hsl(var(--primary))",
                 WebkitTextFillColor: "transparent",
-                WebkitTextStroke: "1.5px hsl(var(--primary) / 0.4)",
-                filter: "drop-shadow(0 2px 8px hsl(var(--primary) / 0.3))",
-                lineHeight: "0.85",
+                filter: "drop-shadow(0 0 12px hsl(var(--primary) / 0.5))",
               }}
             >
               {rankNumber}
