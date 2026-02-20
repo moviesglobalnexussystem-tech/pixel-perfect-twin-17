@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Play, Share2, Eye, Copy, Check,
   Wallet, ArrowDownToLine, AlertTriangle, Film,
-  X, CreditCard, Timer, RefreshCw
+  X, CreditCard, Timer, RefreshCw, Pencil
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -46,6 +46,9 @@ const Agent = () => {
   const [renewNumber, setRenewNumber] = useState("");
   const [isProcessing, setIsProcessing] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [editingName, setEditingName] = useState(false);
+  const [newName, setNewName] = useState("");
+  const [seriesPosters, setSeriesPosters] = useState<Record<string, string>>({});
 
   // Redirect if no agent data
   useEffect(() => {
@@ -63,6 +66,11 @@ const Agent = () => {
           getMovies(), getSeries(), getEpisodes()
         ]);
 
+        // Build series poster map
+        const posterMap: Record<string, string> = {};
+        series.forEach(s => { if (s.posterUrl) posterMap[s.id] = s.posterUrl; });
+        setSeriesPosters(posterMap);
+
         const items: ContentItem[] = [
           ...movies.filter(m => m.isAgent).map(m => ({
             id: m.id, title: m.name, type: "Movie" as const,
@@ -73,7 +81,7 @@ const Agent = () => {
           ...episodes.filter(e => e.isAgent).map(e => ({
             id: e.id, title: e.seriesName, type: "Episode" as const,
             episode: `EP ${e.episodeNumber}`,
-            thumbnail: "/placeholder.svg",
+            thumbnail: posterMap[e.seriesId] || "/placeholder.svg",
             genre: "", streamLink: e.streamLink,
             downloadLink: e.downloadLink,
             seriesId: e.seriesId,
@@ -108,7 +116,7 @@ const Agent = () => {
 
   const agentBalance = agentData.balance || 0;
   const daysUntilExpiry = Math.max(0, Math.ceil((new Date(agentData.planExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
-  const isExpiringSoon = daysUntilExpiry <= 7;
+  const isExpiringSoon = daysUntilExpiry <= 3;
 
 
   const handleCopyLink = (shareCode: string, id: string) => {
@@ -116,6 +124,18 @@ const Agent = () => {
     navigator.clipboard.writeText(link).catch(() => {});
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
+  };
+
+  const handleSaveName = async () => {
+    if (!newName.trim() || !agentData) return;
+    try {
+      await updateAgent(agentData.id, { name: newName.trim() });
+      setAgentData({ ...agentData, name: newName.trim() });
+      setEditingName(false);
+      toast({ title: "Name updated!" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
   };
 
   const handleWithdraw = async () => {
@@ -193,7 +213,21 @@ const Agent = () => {
 
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h1 className="text-foreground text-xl font-bold">Agent Dashboard</h1>
+            <div className="flex items-center gap-2">
+              {editingName ? (
+                <div className="flex items-center gap-2">
+                  <input type="text" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={agentData.name}
+                    className="bg-secondary border border-border rounded-lg px-2 py-1 text-foreground text-sm font-bold focus:outline-none focus:ring-1 focus:ring-ring w-40" autoFocus />
+                  <Button size="sm" className="text-[10px] h-7" onClick={handleSaveName}>Save</Button>
+                  <button onClick={() => setEditingName(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-foreground text-xl font-bold">{agentData.name}</h1>
+                  <button onClick={() => { setNewName(agentData.name); setEditingName(true); }} className="text-muted-foreground hover:text-primary"><Pencil className="w-3.5 h-3.5" /></button>
+                </>
+              )}
+            </div>
             <p className="text-muted-foreground text-xs mt-1">Share content • Earn money</p>
           </div>
           <div className="text-right">

@@ -210,10 +210,11 @@ export const subscribeSharedLinks = (agentDocId: string, callback: (items: Share
 
 // ==================== GENERATE AGENT ID ====================
 export const generateAgentId = (): string => {
-  const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-  const part1 = Array.from({ length: 4 }, () => chars[Math.floor(Math.random() * chars.length)]).join("");
-  const part2 = String(Math.floor(Math.random() * 1000)).padStart(3, "0");
-  return `AG-${part1}-${part2}`;
+  const digits = "0123456789";
+  const letters = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+  const mid = Array.from({ length: 5 }, () => digits[Math.floor(Math.random() * digits.length)]).join("");
+  const end = letters[Math.floor(Math.random() * letters.length)];
+  return `AGNT${mid}${end}`;
 };
 
 // ==================== LATEST UPDATES ====================
