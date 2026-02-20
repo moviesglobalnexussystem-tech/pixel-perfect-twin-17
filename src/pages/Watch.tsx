@@ -353,26 +353,40 @@ const Watch = () => {
       toast({ title: "No download available", variant: "destructive" });
       return;
     }
+    const fileName = currentEpisode
+      ? `${drama.title} - Episode ${currentEpisode.episodeNumber}.mp4`
+      : `${drama.title}.mp4`;
     setIsDownloading(true);
-    toast({ title: "Preparing download...", description: "Please wait while the video is being fetched." });
+    toast({ title: "Preparing download...", description: "Fetching video file..." });
     try {
-      const response = await fetch(downloadUrl);
-      if (!response.ok) throw new Error(`Download failed (${response.status})`);
+      // Try blob download first (works if CORS allows it)
+      const response = await fetch(downloadUrl, { mode: "cors" });
+      if (!response.ok) throw new Error("CORS_BLOCKED");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const fileName = currentEpisode
-        ? `${drama.title} - Episode ${currentEpisode.episodeNumber}.mp4`
-        : `${drama.title}.mp4`;
       a.download = fileName;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
       toast({ title: "Download started!", description: fileName });
-    } catch (err: any) {
-      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    } catch {
+      // Fallback: open direct link which browser will download for .mp4 files
+      const a = document.createElement("a");
+      a.href = downloadUrl;
+      a.download = fileName;
+      a.target = "_self";
+      a.rel = "noopener";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 1000);
+      toast({ title: "Download started!", description: fileName });
     }
     setIsDownloading(false);
   };
