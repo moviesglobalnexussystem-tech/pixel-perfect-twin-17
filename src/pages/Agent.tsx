@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import {
-  Play, Download, Share2, Eye, Copy, Check,
-  Wallet, ArrowDownToLine, Clock, AlertTriangle, Film,
-  ChevronRight, X, Phone, CreditCard, Timer, RefreshCw
+  Play, Share2, Eye, Copy, Check,
+  Wallet, ArrowDownToLine, AlertTriangle, Film,
+  X, CreditCard, Timer, RefreshCw
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 import {
   getMovies, getSeries, getEpisodes,
-  subscribeSharedLinks, addSharedLink, generateAgentId,
+  subscribeSharedLinks,
   updateAgent, addTransaction,
   type SharedLink,
 } from "@/lib/firebaseServices";
@@ -25,6 +25,8 @@ interface ContentItem {
   thumbnail: string;
   genre: string;
   streamLink?: string;
+  downloadLink?: string;
+  seriesId?: string;
 }
 
 const Agent = () => {
@@ -34,9 +36,6 @@ const Agent = () => {
 
   const [content, setContent] = useState<ContentItem[]>([]);
   const [sharedLinks, setSharedLinks] = useState<SharedLink[]>([]);
-  const [showShareModal, setShowShareModal] = useState(false);
-  const [selectedContent, setSelectedContent] = useState<ContentItem | null>(null);
-  const [sharePrice, setSharePrice] = useState("");
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawNumber, setWithdrawNumber] = useState("");
@@ -56,7 +55,7 @@ const Agent = () => {
     }
   }, [agentData]);
 
-  // Load content from Firestore
+  // Load only agent-marked content from Firestore
   useEffect(() => {
     const loadContent = async () => {
       try {
@@ -65,21 +64,19 @@ const Agent = () => {
         ]);
 
         const items: ContentItem[] = [
-          ...movies.map(m => ({
+          ...movies.filter(m => m.isAgent).map(m => ({
             id: m.id, title: m.name, type: "Movie" as const,
             thumbnail: m.posterUrl || "/placeholder.svg",
             genre: m.genre, streamLink: m.streamLink,
+            downloadLink: m.downloadLink,
           })),
-          ...series.map(s => ({
-            id: s.id, title: s.name, type: "Series" as const,
-            thumbnail: s.posterUrl || "/placeholder.svg",
-            genre: s.genre,
-          })),
-          ...episodes.map(e => ({
+          ...episodes.filter(e => e.isAgent).map(e => ({
             id: e.id, title: e.seriesName, type: "Episode" as const,
             episode: `EP ${e.episodeNumber}`,
             thumbnail: "/placeholder.svg",
             genre: "", streamLink: e.streamLink,
+            downloadLink: e.downloadLink,
+            seriesId: e.seriesId,
           })),
         ];
         setContent(items);
@@ -113,42 +110,9 @@ const Agent = () => {
   const daysUntilExpiry = Math.max(0, Math.ceil((new Date(agentData.planExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
   const isExpiringSoon = daysUntilExpiry <= 7;
 
-  const handleShare = (item: ContentItem) => {
-    setSelectedContent(item);
-    setSharePrice("");
-    setShowShareModal(true);
-  };
-
-  const handleCreateShare = async () => {
-    if (!selectedContent || !sharePrice || !agentData) return;
-    setIsProcessing(true);
-    try {
-      const shareCode = `${agentData.agentId}-${String(sharedLinks.length + 1).padStart(3, "0")}`;
-      await addSharedLink({
-        agentId: agentData.agentId,
-        agentDocId: agentData.id,
-        contentType: selectedContent.type.toLowerCase() as any,
-        contentId: selectedContent.id,
-        contentTitle: `${selectedContent.title}${selectedContent.episode ? ` ${selectedContent.episode}` : ""}`,
-        price: parseInt(sharePrice),
-        views: 0,
-        earnings: 0,
-        shareCode,
-        active: true,
-        streamLink: selectedContent.streamLink,
-        posterUrl: selectedContent.thumbnail,
-      } as any);
-
-      setShowShareModal(false);
-      toast({ title: "Share link created!", description: `Share code: ${shareCode}` });
-    } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
-    }
-    setIsProcessing(false);
-  };
 
   const handleCopyLink = (shareCode: string, id: string) => {
-    const link = `${window.location.origin}/shared/${shareCode}`;
+    const link = `${window.location.origin}/a/${shareCode}`;
     navigator.clipboard.writeText(link).catch(() => {});
     setCopiedId(id);
     setTimeout(() => setCopiedId(null), 2000);
@@ -247,7 +211,7 @@ const Agent = () => {
           <div className="bg-card border border-border rounded-xl p-4">
             <Share2 className="w-5 h-5 text-accent mb-2" />
             <p className="text-foreground text-lg font-bold">{sharedLinks.filter(l => l.active).length}</p>
-            <p className="text-muted-foreground text-[11px]">Active Shares</p>
+            <p className="text-muted-foreground text-[11px]">Active Sales</p>
           </div>
           <div className="bg-card border border-border rounded-xl p-4">
             <Eye className="w-5 h-5 text-primary mb-2" />
@@ -264,7 +228,7 @@ const Agent = () => {
         <Tabs defaultValue="content" className="space-y-4">
           <TabsList className="bg-secondary border border-border w-full justify-start overflow-x-auto scrollbar-thin">
             <TabsTrigger value="content" className="text-xs">Content</TabsTrigger>
-            <TabsTrigger value="shared" className="text-xs">My Shares</TabsTrigger>
+            <TabsTrigger value="shared" className="text-xs">My Sales</TabsTrigger>
             <TabsTrigger value="withdraw" className="text-xs">Withdraw</TabsTrigger>
           </TabsList>
 
@@ -287,8 +251,8 @@ const Agent = () => {
                       <p className="text-foreground text-xs font-semibold line-clamp-1">{item.title}</p>
                       <p className="text-muted-foreground text-[10px] mt-0.5">{item.episode ? `${item.episode} • ` : ""}{item.genre}</p>
                       <div className="flex gap-2 mt-2">
-                        <Button size="sm" variant="outline" className="text-[10px] h-7 flex-1 gap-1" onClick={() => handleShare(item)}>
-                          <Share2 className="w-3 h-3" /> Share
+                        <Button size="sm" className="text-[10px] h-7 flex-1 gap-1" onClick={() => navigate(`/agent-watch/${item.id}`, { state: { firebaseId: item.id, title: item.title, image: item.thumbnail, streamLink: item.streamLink, downloadLink: item.downloadLink, type: item.type, genre: item.genre, episode: item.episode, seriesId: item.seriesId } })}>
+                          <Play className="w-3 h-3" /> Watch & Sell
                         </Button>
                       </div>
                     </div>
@@ -301,11 +265,11 @@ const Agent = () => {
           <TabsContent value="shared">
             <div className="bg-card border border-border rounded-xl overflow-hidden">
               <div className="px-4 py-3 border-b border-border">
-                <h2 className="text-foreground text-sm font-semibold">Shared Content Links</h2>
-                <p className="text-muted-foreground text-[10px] mt-0.5">Users pay via Mobile Money to access for 10 minutes</p>
+                <h2 className="text-foreground text-sm font-semibold">Sell Links</h2>
+                <p className="text-muted-foreground text-[10px] mt-0.5">Audiences pay via Mobile Money to access content</p>
               </div>
               {sharedLinks.length === 0 ? (
-                <div className="p-8 text-center text-muted-foreground text-xs">No shared links yet. Go to Content tab and share something!</div>
+                <div className="p-8 text-center text-muted-foreground text-xs">No sell links yet. Go to Content tab, click a movie, and create a sell link!</div>
               ) : (
                 <div className="divide-y divide-border">
                   {sharedLinks.map((link) => (
@@ -326,7 +290,7 @@ const Agent = () => {
                       </div>
                       <div className="flex items-center gap-2 mt-2">
                         <div className="flex items-center gap-1 bg-secondary rounded px-2 py-1.5 flex-1">
-                          <code className="text-[10px] text-foreground flex-1 truncate">/shared/{link.shareCode}</code>
+                          <code className="text-[10px] text-foreground flex-1 truncate">/a/{link.shareCode}</code>
                         </div>
                         <button onClick={() => handleCopyLink(link.shareCode, link.id)} className="bg-secondary text-muted-foreground hover:text-foreground p-1.5 rounded">
                           {copiedId === link.id ? <Check className="w-3 h-3 text-primary" /> : <Copy className="w-3 h-3" />}
@@ -373,29 +337,6 @@ const Agent = () => {
         </Tabs>
       </div>
 
-      {/* Share Modal */}
-      {showShareModal && selectedContent && (
-        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowShareModal(false)}>
-          <div className="bg-card border border-border rounded-xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-sm font-bold text-foreground">Share Content</h3>
-              <button onClick={() => setShowShareModal(false)} className="text-muted-foreground hover:text-foreground"><X className="w-4 h-4" /></button>
-            </div>
-            <div className="bg-secondary rounded-lg p-3 mb-4">
-              <p className="text-foreground text-xs font-medium">{selectedContent.title}</p>
-              <p className="text-muted-foreground text-[10px]">{selectedContent.type}{selectedContent.episode ? ` • ${selectedContent.episode}` : ""}</p>
-            </div>
-            <div className="mb-4">
-              <label className="text-muted-foreground text-[10px] block mb-1">Set Price (UGX)</label>
-              <input type="number" value={sharePrice} onChange={(e) => setSharePrice(e.target.value)} placeholder="e.g. 2000"
-                className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
-            </div>
-            <Button className="w-full text-xs h-9" onClick={handleCreateShare} disabled={isProcessing || !sharePrice}>
-              {isProcessing ? "Creating..." : "Create Share Link"}
-            </Button>
-          </div>
-        </div>
-      )}
 
       {/* Renew Modal */}
       {showRenewModal && (
