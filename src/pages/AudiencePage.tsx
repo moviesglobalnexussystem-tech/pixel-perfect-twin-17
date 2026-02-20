@@ -145,6 +145,21 @@ const AudiencePage = () => {
         views: (content.views || 0) + 1,
         earnings: (content.earnings || 0) + content.price,
       });
+
+      // Credit the agent's balance in Firebase
+      try {
+        const agent = await getAgentByAgentId(content.agentId);
+        if (agent) {
+          const { updateAgent } = await import("@/lib/firebaseServices");
+          await updateAgent(agent.id, {
+            balance: (agent.balance || 0) + content.price,
+            totalEarnings: (agent.totalEarnings || 0) + content.price,
+          });
+        }
+      } catch (e) {
+        console.error("Failed to credit agent balance:", e);
+      }
+
       grantAccess(shareCode!, accessDuration);
       setStep("success");
       setTimeout(() => {
