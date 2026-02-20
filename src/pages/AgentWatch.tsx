@@ -122,16 +122,34 @@ const AgentWatch = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const handleDownload = () => {
-    if (downloadLink) {
-      const a = document.createElement("a");
-      a.href = downloadLink;
-      a.target = "_blank";
-      a.download = `${title}.mp4`;
-      a.click();
-    } else {
+  const [isDownloading, setIsDownloading] = useState(false);
+
+  const handleDownload = async () => {
+    if (!downloadLink) {
       toast({ title: "No download available", variant: "destructive" });
+      return;
     }
+    setIsDownloading(true);
+    toast({ title: "Starting download...", description: "Please wait while the video is being prepared." });
+    try {
+      const response = await fetch(downloadLink);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const fileName = currentEpisode
+        ? `${title} - Episode ${currentEpisode.episodeNumber}.mp4`
+        : `${title}.mp4`;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Download started!", description: fileName });
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    }
+    setIsDownloading(false);
   };
 
   const contentSharedLinks = sharedLinks.filter(l => l.contentId === contentId);
@@ -163,10 +181,10 @@ const AgentWatch = () => {
           <DollarSign className="w-4 h-4 text-primary-foreground" />
           <span className="text-[10px] font-bold text-primary-foreground">Sell</span>
         </button>
-        <button onClick={handleDownload}
-          className="flex-1 flex flex-col items-center gap-0.5 bg-card border border-border rounded-lg py-2 hover:bg-secondary transition-colors">
-          <Download className="w-4 h-4 text-muted-foreground" />
-          <span className="text-[10px] font-medium text-muted-foreground">Download</span>
+        <button onClick={handleDownload} disabled={isDownloading}
+          className="flex-1 flex flex-col items-center gap-0.5 bg-card border border-border rounded-lg py-2 hover:bg-secondary transition-colors disabled:opacity-50">
+          <Download className={`w-4 h-4 text-muted-foreground ${isDownloading ? "animate-pulse" : ""}`} />
+          <span className="text-[10px] font-medium text-muted-foreground">{isDownloading ? "Downloading..." : "Download"}</span>
         </button>
       </div>
 
