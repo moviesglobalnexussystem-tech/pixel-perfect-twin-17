@@ -66,9 +66,7 @@ const DramaCard = ({ drama, showRank }: DramaCardProps) => {
               className="font-black italic leading-none select-none"
               style={{
                 fontSize: "clamp(70px, 10vw, 100px)",
-                background: `linear-gradient(180deg, hsl(var(--top-gold)) 0%, hsl(var(--accent)) 100%)`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
+                color: "#9b59b6",
                 WebkitTextStroke: "2px hsl(var(--primary))",
                 filter: "drop-shadow(0 0 12px hsl(var(--primary) / 0.5))",
               }}
