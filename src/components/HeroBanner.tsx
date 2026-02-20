@@ -37,7 +37,7 @@ const HeroBanner = () => {
   // Loading state
   if (carousels === null) {
     return (
-      <div className="relative w-full aspect-[16/7] bg-card rounded-b-lg flex items-center justify-center">
+      <div className="relative w-full aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5] bg-card rounded-b-lg flex items-center justify-center">
         <LogoLoader text="Loading banner..." />
       </div>
     );
@@ -49,7 +49,7 @@ const HeroBanner = () => {
   const slide = slides[current];
 
   return (
-    <div className="relative w-full aspect-[16/7] overflow-hidden bg-card">
+    <div className="relative w-full aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5] overflow-hidden bg-card">
       {slides.map((s, i) => (
         <img
           key={i}
