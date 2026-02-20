@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
 import HeroBanner from "@/components/HeroBanner";
@@ -26,12 +26,30 @@ const toDrama = (s: SeriesItem, i: number): Drama => ({
   displayOrder: s.displayOrder || 0,
 });
 
+const genreMatch = (genre: string | undefined, filter: string) => {
+  if (!genre) return false;
+  return genre.toLowerCase().includes(filter.toLowerCase());
+};
+
 const Series = () => {
   const [seriesList, setSeriesList] = useState<SeriesItem[] | null>(null);
+  const [activeGenre, setActiveGenre] = useState("All Videos");
 
   useEffect(() => {
     return subscribeSeries(setSeriesList);
   }, []);
+
+  const allDramas = useMemo(() => {
+    if (!seriesList) return [];
+    return seriesList
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+      .map((s, i) => toDrama(s, i));
+  }, [seriesList]);
+
+  const dramas = useMemo(() => {
+    if (activeGenre === "All Videos") return allDramas;
+    return allDramas.filter(d => genreMatch(d.genre, activeGenre));
+  }, [allDramas, activeGenre]);
 
   if (seriesList === null) {
     return (
@@ -41,9 +59,6 @@ const Series = () => {
     );
   }
 
-  const dramas = seriesList
-    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-    .map((s, i) => toDrama(s, i));
   const popular = dramas.filter(d => seriesList.find(s => s.id === d.firebaseId)?.isPopular);
   const comingSoon = dramas.filter(d => d.badge === "Coming soon");
   const topTen = dramas.filter(d => d.rank != null).map((d, i) => ({ ...d, rank: i + 1 }));
@@ -56,7 +71,7 @@ const Series = () => {
   return (
     <div className="min-h-screen bg-background">
       <HeroBanner page="series" compact />
-      <GenreTags />
+      <GenreTags activeGenre={activeGenre} onGenreChange={setActiveGenre} />
       {dramas.length > 0 && <ContentRow title="📺 All Series" dramas={dramas} />}
       {popular.length > 0 && <ContentRow title="Popular Series" dramas={popular} />}
       {topTen.length > 0 && <ContentRow title="Top Rated" dramas={topTen} showRank />}
@@ -69,8 +84,8 @@ const Series = () => {
       {dramas.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
           <span className="text-4xl mb-4">📺</span>
-          <p className="text-sm font-medium">No series uploaded yet</p>
-          <p className="text-xs mt-1">Check back soon or visit Admin to upload</p>
+          <p className="text-sm font-medium">{activeGenre === "All Videos" ? "No series uploaded yet" : `No series found for "${activeGenre}"`}</p>
+          <p className="text-xs mt-1">{activeGenre === "All Videos" ? "Check back soon or visit Admin to upload" : "Try a different genre filter"}</p>
         </div>
       )}
     </div>

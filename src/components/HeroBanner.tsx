@@ -39,22 +39,18 @@ const HeroBanner = ({ page = "home", compact = false }: HeroBannerProps) => {
     return () => clearInterval(timer);
   }, [next, slides.length]);
 
-  // Loading state
   if (carousels === null) {
     return (
-      <div className={`relative w-full ${compact ? "aspect-[16/5] md:aspect-[16/4]" : "aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5]"} bg-card rounded-b-lg flex items-center justify-center`}>
+      <div className={`relative w-full ${compact ? "h-28 md:h-36" : "aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5]"} bg-card rounded-b-lg flex items-center justify-center`}>
         <LogoLoader text="Loading banner..." />
       </div>
     );
   }
 
-  // No carousels from Firebase
   if (slides.length === 0) return null;
 
-  const slide = slides[current];
-
   return (
-    <div className={`relative w-full ${compact ? "aspect-[16/5] md:aspect-[16/4]" : "aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5]"} overflow-hidden bg-card`}>
+    <div className={`relative w-full ${compact ? "h-28 md:h-36" : "aspect-[16/7] md:aspect-[16/5] lg:aspect-[16/4.5]"} overflow-hidden bg-card`}>
       {slides.map((s, i) => (
         <img
           key={i}
@@ -78,7 +74,7 @@ const HeroBanner = ({ page = "home", compact = false }: HeroBannerProps) => {
       )}
 
       {slides.length > 1 && (
-        <div className="absolute bottom-4 right-4 md:right-10 flex gap-1.5">
+        <div className={`absolute ${compact ? "bottom-2 right-2" : "bottom-4 right-4 md:right-10"} flex gap-1.5`}>
           {slides.map((_, i) => (
             <button key={i} onClick={() => setCurrent(i)}
               className={`w-1.5 h-1.5 rounded-full transition-colors ${i === current ? "bg-foreground" : "bg-muted-foreground/40"}`}
