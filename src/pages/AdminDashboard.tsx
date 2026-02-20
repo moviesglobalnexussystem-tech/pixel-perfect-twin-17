@@ -3,7 +3,8 @@ import {
   LayoutDashboard, Film, Tv, PlayCircle, Image, Radio, Activity,
   Users, ShieldCheck, Wallet, ChevronLeft, ChevronRight, Plus, Pencil,
   Trash2, Ban, CheckCircle, Eye, Search, Download, X, Star, Clock,
-  ArrowUpDown, AlertTriangle, RefreshCw, Newspaper, ListOrdered, Trophy
+  ArrowUpDown, AlertTriangle, RefreshCw, Newspaper, ListOrdered, Trophy,
+  Loader2, ArrowDownToLine, Lock
 } from "lucide-react";
 import SelectionManager from "@/components/admin/SelectionManager";
 import RankManager from "@/components/admin/RankManager";
@@ -11,6 +12,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
+import { useNavigate } from "react-router-dom";
 import {
   type SeriesItem, type MovieItem, type EpisodeItem, type CarouselItem,
   type TVChannelItem, type AgentItem, type UserItem, type WalletTransaction,
@@ -28,8 +31,11 @@ import {
   addLatestUpdate, updateLatestUpdate, deleteLatestUpdate,
   updateAgent, deleteAgent,
   updateUser, deleteUser,
-  deleteTransaction,
+  deleteTransaction, addTransaction,
 } from "@/lib/firebaseServices";
+import { getWalletBalance, getLivraTransactions, requestWithdraw } from "@/lib/livraPayment";
+
+const ADMIN_EMAIL = "mainplatform.nexus@gmail.com";
 
 type Section = "overview" | "series" | "movies" | "episodes" | "carousel" | "tv-channels" | "latest-updates" | "activity" | "agents" | "users" | "wallet" | "selection" | "ranking";
 
@@ -50,9 +56,14 @@ const sidebarItems: { key: Section; label: string; icon: any }[] = [
 ];
 
 const AdminDashboard = () => {
+  const { user, loading: authLoading } = useAuth();
+  const navigate = useNavigate();
   const [section, setSection] = useState<Section>("overview");
   const [collapsed, setCollapsed] = useState(false);
   const [search, setSearch] = useState("");
+
+  // Admin access check
+  const isAdmin = user?.email === ADMIN_EMAIL;
 
   // Real-time data from Firestore
   const [series, setSeries] = useState<SeriesItem[]>([]);
@@ -68,6 +79,7 @@ const AdminDashboard = () => {
 
   // Subscribe to real-time Firestore updates
   useEffect(() => {
+    if (!isAdmin) return;
     const unsubs = [
       subscribeSeries(setSeries),
       subscribeMovies(setMovies),
@@ -81,7 +93,32 @@ const AdminDashboard = () => {
       subscribeLatestUpdates(setLatestUpdates),
     ];
     return () => unsubs.forEach(u => u());
-  }, []);
+  }, [isAdmin]);
+
+  // Show loading while auth is loading
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <Loader2 className="w-8 h-8 text-primary animate-spin" />
+      </div>
+    );
+  }
+
+  // Block non-admin users
+  if (!user || !isAdmin) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <div className="bg-card border border-border rounded-2xl p-8 text-center max-w-sm shadow-xl">
+          <Lock className="w-14 h-14 text-destructive mx-auto mb-4" />
+          <h1 className="text-foreground text-xl font-bold mb-2">Access Denied</h1>
+          <p className="text-muted-foreground text-sm mb-6">
+            This page is restricted to authorized administrators only.
+          </p>
+          <Button onClick={() => navigate("/")} className="text-xs">Go Home</Button>
+        </div>
+      </div>
+    );
+  }
 
   const stats = [
     { label: "Total Movies", value: movies.length, color: "text-primary" },
@@ -953,8 +990,74 @@ const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) 
 // ==================== WALLET SECTION ====================
 const WalletSection = ({ transactions, search }: { transactions: WalletTransaction[]; search: string }) => {
   const filtered = transactions.filter(t => t.userName.toLowerCase().includes(search.toLowerCase()) || t.type.includes(search.toLowerCase()));
-  const totalBalance = transactions.filter(t => t.status === "completed").reduce((sum, t) => t.type === "withdrawal" ? sum - t.amount : sum + t.amount, 0);
   const { toast } = useToast();
+  const [livraBalance, setLivraBalance] = useState(0);
+  const [livraTransactions, setLivraTransactions] = useState<any[]>([]);
+  const [loadingBalance, setLoadingBalance] = useState(true);
+  const [showWithdraw, setShowWithdraw] = useState(false);
+  const [withdrawAmount, setWithdrawAmount] = useState("");
+  const [withdrawNumber, setWithdrawNumber] = useState("");
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Fetch real Livra wallet balance & transactions
+  useEffect(() => {
+    const load = async () => {
+      setLoadingBalance(true);
+      try {
+        const [balData, txData] = await Promise.all([getWalletBalance(), getLivraTransactions()]);
+        setLivraBalance(balData.balance);
+        setLivraTransactions(Array.isArray(txData) ? txData : []);
+      } catch { }
+      setLoadingBalance(false);
+    };
+    load();
+  }, []);
+
+  const handleAdminWithdraw = async () => {
+    if (!withdrawAmount || !withdrawNumber) return;
+    const amt = parseInt(withdrawAmount);
+    if (amt < 1000) {
+      toast({ title: "Minimum UGX 1,000", variant: "destructive" });
+      return;
+    }
+    if (amt > livraBalance) {
+      toast({ title: "Insufficient Livra balance", description: `Available: UGX ${livraBalance.toLocaleString()}`, variant: "destructive" });
+      return;
+    }
+    setIsProcessing(true);
+    try {
+      const result = await requestWithdraw(withdrawNumber, amt, "LUO FILM Admin Withdrawal");
+      if (!result.success) {
+        toast({ title: "Withdrawal failed", description: result.error, variant: "destructive" });
+        setIsProcessing(false);
+        return;
+      }
+
+      await addTransaction({
+        userId: "admin",
+        userName: "Admin",
+        userPhone: withdrawNumber,
+        type: "withdrawal",
+        amount: amt,
+        status: "completed",
+        method: "Mobile Money (Livra)",
+        description: "Admin withdrawal",
+        livraRef: result.internal_reference,
+        createdAt: new Date().toISOString().split("T")[0],
+      } as any);
+
+      setLivraBalance(prev => prev - amt);
+      setShowWithdraw(false);
+      setWithdrawAmount("");
+      setWithdrawNumber("");
+      toast({ title: "Withdrawal successful!", description: `UGX ${amt.toLocaleString()} sent` });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setIsProcessing(false);
+  };
+
+  const totalFirestoreBalance = transactions.filter(t => t.status === "completed").reduce((sum, t) => t.type === "withdrawal" ? sum - t.amount : sum + t.amount, 0);
 
   const deleteFailed = async () => {
     const failed = transactions.filter(t => t.status === "failed");
@@ -964,10 +1067,18 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
 
   return (
     <div>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-6">
         <div className="bg-card border border-border rounded-xl p-4">
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Balance</p>
-          <p className="text-xl font-bold text-primary">{totalBalance.toLocaleString()} UGX</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Livra Wallet Balance</p>
+          {loadingBalance ? (
+            <Loader2 className="w-5 h-5 text-primary animate-spin" />
+          ) : (
+            <p className="text-xl font-bold text-primary">{livraBalance.toLocaleString()} UGX</p>
+          )}
+        </div>
+        <div className="bg-card border border-border rounded-xl p-4">
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Firestore Balance</p>
+          <p className="text-xl font-bold text-foreground">{totalFirestoreBalance.toLocaleString()} UGX</p>
         </div>
         <div className="bg-card border border-border rounded-xl p-4">
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Transactions</p>
@@ -975,14 +1086,47 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
         </div>
         <div className="bg-card border border-border rounded-xl p-4 flex items-center justify-between">
           <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Failed</p>
-            <p className="text-xl font-bold text-destructive">{transactions.filter(t => t.status === "failed").length}</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Admin Actions</p>
+            <div className="flex gap-1.5 mt-1">
+              <Button size="sm" className="h-7 text-[10px] gap-1" onClick={() => setShowWithdraw(true)}>
+                <ArrowDownToLine className="w-3 h-3" /> Withdraw
+              </Button>
+              <Button size="sm" variant="destructive" className="h-7 text-[10px]" onClick={deleteFailed}>
+                <Trash2 className="w-3 h-3 mr-1" /> Clear Failed
+              </Button>
+            </div>
           </div>
-          <Button size="sm" variant="destructive" className="h-7 text-[10px]" onClick={deleteFailed}>
-            <Trash2 className="w-3 h-3 mr-1" /> Clear Failed
-          </Button>
         </div>
       </div>
+
+      {/* Admin withdraw modal */}
+      {showWithdraw && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowWithdraw(false)}>
+          <div className="bg-card border border-border rounded-xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-foreground mb-3">Admin Withdraw</h3>
+            <p className="text-muted-foreground text-[10px] mb-4">Livra Balance: <span className="text-primary font-bold">UGX {livraBalance.toLocaleString()}</span></p>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-muted-foreground text-[10px] block mb-1">Amount (UGX)</label>
+                <input type="number" value={withdrawAmount} onChange={e => setWithdrawAmount(e.target.value)} placeholder="Amount"
+                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+              <div>
+                <label className="text-muted-foreground text-[10px] block mb-1">Mobile Money Number</label>
+                <input type="tel" value={withdrawNumber} onChange={e => setWithdrawNumber(e.target.value)} placeholder="e.g. 0771234567"
+                  className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => setShowWithdraw(false)}>Cancel</Button>
+              <Button size="sm" className="flex-1 h-8 text-xs" onClick={handleAdminWithdraw} disabled={isProcessing || !withdrawAmount || !withdrawNumber}>
+                {isProcessing ? "Processing..." : "Withdraw"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full text-xs">
           <thead><tr className="border-b border-border bg-secondary/50">

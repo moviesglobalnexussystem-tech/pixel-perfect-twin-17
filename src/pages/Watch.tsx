@@ -1,12 +1,12 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Play, MessageSquare, Clock, Share2, Monitor, Smartphone, ChevronRight, Star, ArrowLeft, Download, Send, Trash2 } from "lucide-react";
-import { subscribeMovies, subscribeSeries, getEpisodesBySeries, subscribeComments, addComment, deleteComment, addWatchLater, subscribeWatchLater, deleteWatchLater, subscribeEpisodes } from "@/lib/firebaseServices";
+import { Play, MessageSquare, Clock, Share2, Monitor, Smartphone, ChevronRight, Star, ArrowLeft, Download, Send, Trash2, Lock } from "lucide-react";
+import { subscribeMovies, subscribeSeries, getEpisodesBySeries, subscribeComments, addComment, deleteComment, addWatchLater, subscribeWatchLater, deleteWatchLater, subscribeEpisodes, getUserByUid } from "@/lib/firebaseServices";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import type { EpisodeItem, CommentItem, WatchLaterItem } from "@/data/adminData";
+import type { EpisodeItem, CommentItem, WatchLaterItem, UserItem } from "@/data/adminData";
 import SportPlayer from "@/components/SportPlayer";
 import ArtPlayerComponent from "@/components/ArtPlayerComponent";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import LogoLoader from "@/components/LogoLoader";
 import type { Drama } from "@/data/dramas";
 import { useAuth } from "@/contexts/AuthContext";
@@ -115,9 +115,55 @@ const SportWatch = () => {
 };
 
 // ==================== HELPER: Check if user has active subscription ====================
-const hasActiveSubscription = (user: any): boolean => {
-  // In a real app, check Firestore user record for subscription status
-  return !!user;
+const checkUserSubscription = (userDoc: UserItem | null): boolean => {
+  if (!userDoc) return false;
+  if (!userDoc.subscription || !userDoc.subscriptionExpiry) return false;
+  const expiry = new Date(userDoc.subscriptionExpiry);
+  return expiry.getTime() > Date.now() && userDoc.status !== "blocked";
+};
+
+// ==================== HELPER: Download video file ====================
+const downloadVideoFile = async (
+  url: string,
+  fileName: string,
+  onStart: () => void,
+  onEnd: () => void,
+  onError: (msg: string) => void,
+  onSuccess: (name: string) => void
+) => {
+  onStart();
+  try {
+    // Try direct fetch (works if CORS is enabled)
+    const response = await fetch(url);
+    if (!response.ok) throw new Error("fetch_failed");
+    const blob = await response.blob();
+    const blobUrl = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
+    const a = document.createElement("a");
+    a.href = blobUrl;
+    a.download = fileName;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    // Clean up after a delay
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(blobUrl);
+    }, 5000);
+    onSuccess(fileName);
+  } catch {
+    // Fallback: use a hidden iframe to trigger download without navigating
+    try {
+      const iframe = document.createElement("iframe");
+      iframe.style.display = "none";
+      iframe.src = url;
+      document.body.appendChild(iframe);
+      setTimeout(() => document.body.removeChild(iframe), 10000);
+      onSuccess(fileName);
+    } catch {
+      onError("Download failed. The video server may not support direct downloads.");
+    }
+  }
+  onEnd();
 };
 
 // ==================== DRAMA WATCH ====================
@@ -140,6 +186,7 @@ const Watch = () => {
   const [subscribeMode, setSubscribeMode] = useState<"user" | "agent">("user");
   const [isDownloading, setIsDownloading] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [userDoc, setUserDoc] = useState<UserItem | null>(null);
   const isSport = id?.startsWith("sport-");
 
   const firebaseState = location.state as {
@@ -160,7 +207,25 @@ const Watch = () => {
     agentMarkedAt?: string | null;
   } | null;
 
-  // Load content from Firestore - either from state or by fetching directly
+  // Check user subscription status
+  useEffect(() => {
+    if (!user) { setUserDoc(null); return; }
+    getUserByUid(user.uid).then(doc => setUserDoc(doc));
+  }, [user]);
+
+  const hasSubscription = checkUserSubscription(userDoc);
+
+  // Reset states when id changes (fix: player not changing on recommended click)
+  useEffect(() => {
+    setDrama(null);
+    setCurrentEpisode(null);
+    setEpisodes([]);
+    setComments([]);
+    setShowComments(false);
+    setIsLoading(true);
+  }, [id]);
+
+  // Load content from Firestore
   useEffect(() => {
     if (isSport || !id) return;
 
@@ -221,7 +286,8 @@ const Watch = () => {
     const unsub1 = subscribeMovies((movies) => {
       setRecommended(movies.filter(m => !m.isAgent).slice(0, 7).map((m, i) => ({
         id: i + 6000, title: m.name, image: m.posterUrl || "/placeholder.svg",
-        firebaseId: m.id, streamLink: m.streamLink,
+        firebaseId: m.id, streamLink: m.streamLink, genre: m.genre,
+        rating: m.rating, description: m.description, downloadLink: m.downloadLink,
       })));
     });
     return () => { unsub1(); };
@@ -236,7 +302,6 @@ const Watch = () => {
         .filter(ep => ep.seriesId === contentId)
         .sort((a, b) => (a.episodeNumber || 0) - (b.episodeNumber || 0));
       setEpisodes(filtered);
-      // Default to first episode if none selected
       if (!currentEpisode && filtered.length > 0 && filtered[0].streamLink) {
         setCurrentEpisode(filtered[0]);
       }
@@ -275,13 +340,12 @@ const Watch = () => {
     );
   }
 
-  // Check if content is agent-only (upcoming) and user doesn't have agent sub
+  // Check if content is agent-only
   const isAgentContent = drama.isAgent;
   const agentMarkedDate = drama.agentMarkedAt ? new Date(drama.agentMarkedAt) : null;
   const daysSinceMarked = agentMarkedDate ? Math.floor((Date.now() - agentMarkedDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
   const isStillOnAgent = isAgentContent && daysSinceMarked < 5;
 
-  // Parse actors: format can be "Name|ImageURL, Name|ImageURL" or just "Name, Name"
   const actorList = drama.actors ? drama.actors.split(",").map(a => {
     const trimmed = a.trim();
     const parts = trimmed.split("|");
@@ -347,7 +411,16 @@ const Watch = () => {
     }
   };
 
-  const handleDownload = async () => {
+  const handleDownload = () => {
+    if (!user) {
+      toast({ title: "Login required", description: "Please login to download", variant: "destructive" });
+      return;
+    }
+    if (!hasSubscription) {
+      toast({ title: "Subscription required", description: "Subscribe to download content", variant: "destructive" });
+      setShowSubscribe(true);
+      return;
+    }
     const downloadUrl = currentEpisode?.downloadLink || currentEpisode?.streamLink || (drama as any).downloadLink || drama.streamLink;
     if (!downloadUrl) {
       toast({ title: "No download available", variant: "destructive" });
@@ -356,39 +429,15 @@ const Watch = () => {
     const fileName = currentEpisode
       ? `${drama.title} - Episode ${currentEpisode.episodeNumber}.mp4`
       : `${drama.title}.mp4`;
-    setIsDownloading(true);
-    toast({ title: "Preparing download...", description: "Fetching video file..." });
-    try {
-      // Try blob download first (works if CORS allows it)
-      const response = await fetch(downloadUrl, { mode: "cors" });
-      if (!response.ok) throw new Error("CORS_BLOCKED");
-      const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = fileName;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 1000);
-      toast({ title: "Download started!", description: fileName });
-    } catch {
-      // Fallback: open direct link which browser will download for .mp4 files
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.download = fileName;
-      a.target = "_self";
-      a.rel = "noopener";
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => document.body.removeChild(a), 1000);
-      toast({ title: "Download started!", description: fileName });
-    }
-    setIsDownloading(false);
+    
+    downloadVideoFile(
+      downloadUrl,
+      fileName,
+      () => { setIsDownloading(true); toast({ title: "Preparing download...", description: "Fetching video file..." }); },
+      () => setIsDownloading(false),
+      (msg) => toast({ title: "Download failed", description: msg, variant: "destructive" }),
+      (name) => toast({ title: "Download started!", description: name })
+    );
   };
 
   const handleWatchOnTV = () => {
@@ -396,12 +445,11 @@ const Watch = () => {
   };
 
   const handleWatchOnApp = () => {
-    // Trigger PWA install or redirect
     toast({ title: "Install LUO FILM App", description: "Add to home screen from your browser menu for the best experience" });
   };
 
-  // If user not logged in or no subscription, show subscribe prompt
-  const requiresSubscription = !user;
+  // Require subscription to play & download
+  const requiresSubscription = !user || !hasSubscription;
 
   return (
     <div className="min-h-screen bg-background">
@@ -417,10 +465,12 @@ const Watch = () => {
               <div className="w-full h-full relative">
                 <img src={drama.image} alt={drama.title} className="w-full h-full object-cover blur-sm" />
                 <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
-                  <Play className="w-12 h-12 text-primary" />
-                  <p className="text-foreground text-sm font-bold">Login & Subscribe to Watch</p>
+                  <Lock className="w-12 h-12 text-primary" />
+                  <p className="text-foreground text-sm font-bold">
+                    {!user ? "Login & Subscribe to Watch" : "Subscribe to Watch"}
+                  </p>
                   <p className="text-muted-foreground text-xs text-center px-8">
-                    {isStillOnAgent ? "This is an exclusive Agent content. Subscribe to Agent plan to watch." : "Get a subscription plan to enjoy unlimited streaming"}
+                    {isStillOnAgent ? "This is exclusive Agent content. Subscribe to Agent plan to watch." : "Get a subscription plan to enjoy unlimited streaming"}
                   </p>
                   <button onClick={() => { setSubscribeMode(isStillOnAgent ? "agent" : "user"); setShowSubscribe(true); }}
                     className="bg-primary text-primary-foreground px-6 py-2 rounded-full text-xs font-bold hover:bg-primary/90">
@@ -453,19 +503,13 @@ const Watch = () => {
               <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-[9px] font-medium text-muted-foreground">{comments.length} Comments</span>
             </button>
-            <button onClick={() => {
-              if (!user) {
-                toast({ title: "Login required", description: "Please login to download", variant: "destructive" });
-                return;
-              }
-              handleDownload();
-            }} disabled={isDownloading} className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95 disabled:opacity-50">
+            <button onClick={handleDownload} disabled={isDownloading} className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95 disabled:opacity-50">
               <Download className={`w-3.5 h-3.5 text-primary-foreground ${isDownloading ? "animate-pulse" : ""}`} />
               <span className="text-[9px] font-bold text-primary-foreground">{isDownloading ? "Downloading..." : "Download"}</span>
             </button>
           </div>
 
-          {/* Episodes Grid - Mobile only (before details) */}
+          {/* Episodes Grid - Mobile only */}
           {drama.episodes && (
             <div className="lg:hidden px-4 pb-3">
               <div className="bg-card border border-border rounded-xl p-3">
@@ -604,8 +648,15 @@ const Watch = () => {
                 <h2 className="text-foreground text-base font-bold mb-3">Recommended</h2>
                 <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-2">
                   {recommended.map((d) => (
-                    <div key={d.id} className="flex-shrink-0 w-[120px] cursor-pointer group"
-                      onClick={() => navigate(`/watch/${d.firebaseId}`, { state: { firebaseId: d.firebaseId, title: d.title, image: d.image, streamLink: d.streamLink } })}>
+                    <div key={d.firebaseId || d.id} className="flex-shrink-0 w-[120px] cursor-pointer group"
+                      onClick={() => navigate(`/watch/${d.firebaseId}`, {
+                        state: {
+                          firebaseId: d.firebaseId, title: d.title, image: d.image,
+                          streamLink: d.streamLink, genre: d.genre, rating: d.rating,
+                          description: d.description, downloadLink: d.downloadLink,
+                        },
+                        replace: false,
+                      })}>
                       <div className="relative rounded-md overflow-hidden mb-1.5 aspect-[2/3]">
                         <img src={d.image} alt={d.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                       </div>

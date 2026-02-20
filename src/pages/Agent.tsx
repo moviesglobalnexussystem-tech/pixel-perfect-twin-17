@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import {
   Play, Share2, Eye, Copy, Check,
   Wallet, ArrowDownToLine, AlertTriangle, Film,
-  X, CreditCard, Timer, RefreshCw, Pencil
+  X, CreditCard, Timer, RefreshCw, Pencil, Loader2
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -16,6 +16,7 @@ import {
 } from "@/lib/firebaseServices";
 import type { MovieItem, SeriesItem, EpisodeItem } from "@/data/adminData";
 import { useNavigate } from "react-router-dom";
+import { requestDeposit, requestWithdraw, pollPaymentStatus } from "@/lib/livraPayment";
 
 interface ContentItem {
   id: string;
@@ -141,13 +142,31 @@ const Agent = () => {
   const handleWithdraw = async () => {
     if (!withdrawAmount || !withdrawNumber || !agentData) return;
     const amt = parseInt(withdrawAmount);
-    if (amt > agentBalance || amt < 1000) {
-      toast({ title: "Invalid amount", description: amt > agentBalance ? "Insufficient balance" : "Min UGX 1,000", variant: "destructive" });
+    if (amt > agentBalance) {
+      toast({ title: "Insufficient balance", description: `Your balance is UGX ${agentBalance.toLocaleString()}. You cannot withdraw more than your balance.`, variant: "destructive" });
       return;
     }
+    if (amt < 1000) {
+      toast({ title: "Invalid amount", description: "Minimum withdrawal is UGX 1,000", variant: "destructive" });
+      return;
+    }
+    const fee = Math.ceil(amt * 0.05); // 5% withdrawal fee
+    const netAmount = amt - fee;
+    
     setIsProcessing(true);
     try {
+      // Real Livra withdrawal
+      const result = await requestWithdraw(withdrawNumber, netAmount, `LUO FILM Agent Withdraw: ${agentData.name}`);
+      if (!result.success) {
+        toast({ title: "Withdrawal failed", description: result.error || "Could not process withdrawal", variant: "destructive" });
+        setIsProcessing(false);
+        return;
+      }
+
+      // Deduct full amount from agent balance
       await updateAgent(agentData.id, { balance: agentBalance - amt });
+      
+      // Record agent withdrawal transaction
       await addTransaction({
         userId: agentData.id,
         userName: agentData.name,
@@ -155,14 +174,17 @@ const Agent = () => {
         type: "withdrawal",
         amount: amt,
         status: "completed",
-        method: withdrawProvider,
+        method: `${withdrawProvider} (Livra)`,
+        description: `Agent withdraw: UGX ${netAmount.toLocaleString()} sent, UGX ${fee.toLocaleString()} fee (5%)`,
+        livraRef: result.internal_reference,
         createdAt: new Date().toISOString().split("T")[0],
       } as any);
+
       setAgentData({ ...agentData, balance: agentBalance - amt });
       setShowWithdrawModal(false);
       setWithdrawAmount("");
       setWithdrawNumber("");
-      toast({ title: "Withdrawal initiated!", description: `UGX ${amt.toLocaleString()} sent to ${withdrawProvider}` });
+      toast({ title: "Withdrawal successful!", description: `UGX ${netAmount.toLocaleString()} sent to ${withdrawProvider}. Fee: UGX ${fee.toLocaleString()} (5%)` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -173,23 +195,62 @@ const Agent = () => {
     if (!renewNumber || !agentData) return;
     setIsProcessing(true);
     try {
-      const expiry = new Date();
-      if (renewPlan === "month") expiry.setMonth(expiry.getMonth() + 1);
-      else expiry.setDate(expiry.getDate() + 7);
+      const description = `LUO FILM Agent Renewal: ${renewPlan === "month" ? "Monthly" : "Weekly"}`;
+      const result = await requestDeposit(renewNumber, renewPrice, description);
+      
+      if (!result.success || !result.internal_reference) {
+        toast({ title: "Payment failed", description: result.error || "Could not initiate payment", variant: "destructive" });
+        setIsProcessing(false);
+        return;
+      }
 
-      await updateAgent(agentData.id, {
-        status: "active",
-        planExpiry: expiry.toISOString().split("T")[0],
-        plan: renewPlan === "month" ? "Monthly" : "Weekly",
-      });
-      setAgentData({ ...agentData, planExpiry: expiry.toISOString().split("T")[0], status: "active" });
-      setShowRenewModal(false);
-      setRenewNumber("");
-      toast({ title: "Subscription renewed!" });
+      toast({ title: "Payment prompt sent", description: "Check your phone and enter your PIN" });
+
+      // Poll for status
+      pollPaymentStatus(
+        result.internal_reference,
+        async () => {
+          // Success
+          const expiry = new Date();
+          if (renewPlan === "month") expiry.setMonth(expiry.getMonth() + 1);
+          else expiry.setDate(expiry.getDate() + 7);
+
+          await updateAgent(agentData.id, {
+            status: "active",
+            planExpiry: expiry.toISOString().split("T")[0],
+            plan: renewPlan === "month" ? "Monthly" : "Weekly",
+          });
+
+          await addTransaction({
+            userId: agentData.id,
+            userName: agentData.name,
+            userPhone: agentData.phone,
+            type: "subscription",
+            amount: renewPrice,
+            status: "completed",
+            method: "Mobile Money (Livra)",
+            description: `Agent renewal: ${renewPlan === "month" ? "Monthly" : "Weekly"}`,
+            livraRef: result.internal_reference,
+            createdAt: new Date().toISOString().split("T")[0],
+          } as any);
+
+          setAgentData({ ...agentData, planExpiry: expiry.toISOString().split("T")[0], status: "active" });
+          setShowRenewModal(false);
+          setRenewNumber("");
+          setIsProcessing(false);
+          toast({ title: "Subscription renewed!" });
+        },
+        (errorMsg) => {
+          toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
+          setIsProcessing(false);
+        },
+        60,
+        5000
+      );
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
+      setIsProcessing(false);
     }
-    setIsProcessing(false);
   };
 
   const renewPrice = renewPlan === "week" ? 20000 : 30000;

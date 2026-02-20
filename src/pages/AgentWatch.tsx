@@ -136,32 +136,30 @@ const AgentWatch = () => {
     setIsDownloading(true);
     toast({ title: "Preparing download...", description: "Fetching video file..." });
     try {
-      const response = await fetch(downloadLink, { mode: "cors" });
-      if (!response.ok) throw new Error("CORS_BLOCKED");
+      const response = await fetch(downloadLink);
+      if (!response.ok) throw new Error("fetch_failed");
       const blob = await response.blob();
-      const url = URL.createObjectURL(blob);
+      const blobUrl = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
       const a = document.createElement("a");
-      a.href = url;
+      a.href = blobUrl;
       a.download = fileName;
       a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      setTimeout(() => {
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      }, 1000);
+      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 5000);
       toast({ title: "Download started!", description: fileName });
     } catch {
-      const a = document.createElement("a");
-      a.href = downloadLink;
-      a.download = fileName;
-      a.target = "_self";
-      a.rel = "noopener";
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => document.body.removeChild(a), 1000);
-      toast({ title: "Download started!", description: fileName });
+      // Fallback: hidden iframe
+      try {
+        const iframe = document.createElement("iframe");
+        iframe.style.display = "none";
+        iframe.src = downloadLink;
+        document.body.appendChild(iframe);
+        setTimeout(() => document.body.removeChild(iframe), 10000);
+        toast({ title: "Download started!", description: fileName });
+      } catch {
+        toast({ title: "Download failed", description: "The video server may not support direct downloads.", variant: "destructive" });
+      }
     }
     setIsDownloading(false);
   };
