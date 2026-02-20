@@ -1,7 +1,24 @@
+import { useState, useEffect } from "react";
 import SportsSection from "@/components/SportsSection";
 import SportHeroBanner from "@/components/SportHeroBanner";
+import LogoLoader from "@/components/LogoLoader";
+import { subscribeCarousels } from "@/lib/firebaseServices";
 
 const LiveSport = () => {
+  const [loaded, setLoaded] = useState(false);
+
+  useEffect(() => {
+    return subscribeCarousels(() => setLoaded(true));
+  }, []);
+
+  if (!loaded) {
+    return (
+      <div className="min-h-screen bg-background">
+        <LogoLoader text="Loading live sport..." />
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background">
       <SportHeroBanner />
