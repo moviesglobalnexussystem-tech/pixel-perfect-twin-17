@@ -32,41 +32,59 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
     if (!shaka.Player.isBrowserSupported()) return;
 
     const video = videoRef.current;
-    // Pass video directly to constructor — skips async attach step
-    const player = new shaka.Player(video);
-    playerRef.current = player;
+    let cancelled = false;
 
-    player.configure({
-      streaming: {
-        bufferingGoal: 2,
-        rebufferingGoal: 0.5,
-        bufferBehind: 10,
-        segmentPrefetchLimit: 2,
-        retryParameters: { maxAttempts: 3, baseDelay: 200, backoffFactor: 1.5, fuzzFactor: 0.3 },
-      },
-      manifest: {
-        retryParameters: { maxAttempts: 3, baseDelay: 200, backoffFactor: 1.5, fuzzFactor: 0.3 },
-        dash: {
-          ignoreMinBufferTime: true,
+    const init = async () => {
+      // Destroy previous instance
+      if (playerRef.current) {
+        await playerRef.current.destroy();
+        playerRef.current = null;
+      }
+
+      if (cancelled) return;
+
+      const player = new shaka.Player();
+      playerRef.current = player;
+
+      player.configure({
+        streaming: {
+          bufferingGoal: 2,
+          rebufferingGoal: 0.5,
+          bufferBehind: 10,
+          segmentPrefetchLimit: 2,
+          retryParameters: { maxAttempts: 3, baseDelay: 200, backoffFactor: 1.5, fuzzFactor: 0.3 },
         },
-      },
-    });
+        manifest: {
+          retryParameters: { maxAttempts: 3, baseDelay: 200, backoffFactor: 1.5, fuzzFactor: 0.3 },
+          dash: { ignoreMinBufferTime: true },
+        },
+      });
 
-    // Muted autoplay is always allowed by browsers
-    video.muted = true;
+      await player.attach(video);
+      if (cancelled) return;
 
-    player.load(src).then(() => {
+      video.muted = true;
+      setLoading(true);
+
+      await player.load(src);
+      if (cancelled) return;
+
       setLoading(false);
-      video.play().then(() => {
-        // Unmute after playback starts
-        setTimeout(() => { video.muted = false; setMuted(false); }, 300);
-      }).catch(() => {});
-    }).catch((err: any) => {
-      console.error("Player error:", err);
-      setLoading(false);
+      try {
+        await video.play();
+        setTimeout(() => { if (!cancelled) { video.muted = false; setMuted(false); } }, 300);
+      } catch { /* autoplay blocked */ }
+    };
+
+    init().catch((err) => {
+      if (!cancelled) {
+        console.error("Player error:", err);
+        setLoading(false);
+      }
     });
 
     return () => {
+      cancelled = true;
       if (playerRef.current) {
         playerRef.current.destroy();
         playerRef.current = null;
@@ -256,27 +274,22 @@ const TVChannel = () => {
       )}
 
       {channels.length > 0 ? (
-        <div className="px-4 md:px-8 mb-8 grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        <div className="px-4 md:px-8 mb-8 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-8 gap-2">
           {channels.map((ch) => (
             <div
               key={ch.id}
               onClick={() => ch.streamLink && setActiveChannel(ch)}
-              className="bg-card border border-border rounded-xl p-4 hover:border-primary/50 cursor-pointer transition-colors"
+              className={`bg-card border rounded-lg p-2 cursor-pointer transition-colors flex flex-col items-center text-center gap-1 ${activeChannel?.id === ch.id ? "border-primary bg-primary/10" : "border-border hover:border-primary/50"}`}
             >
               {ch.logoUrl ? (
-                <img src={ch.logoUrl} alt={ch.name} className="w-10 h-10 rounded-lg object-cover mb-3" />
+                <img src={ch.logoUrl} alt={ch.name} className="w-8 h-8 rounded-md object-cover" />
               ) : (
-                <div className="w-10 h-10 bg-primary/20 rounded-lg flex items-center justify-center mb-3">
-                  <span className="text-primary text-xs font-bold">TV</span>
+                <div className="w-8 h-8 bg-primary/20 rounded-md flex items-center justify-center">
+                  <span className="text-primary text-[9px] font-bold">TV</span>
                 </div>
               )}
-              <p className="text-foreground text-xs font-medium">{ch.name}</p>
-              <p className="text-muted-foreground text-[10px]">{ch.category}</p>
-              {ch.isLive && (
-                <span className="inline-flex items-center gap-1 mt-2 text-[9px] text-destructive font-medium">
-                  <span className="w-1.5 h-1.5 bg-destructive rounded-full animate-pulse" />LIVE
-                </span>
-              )}
+              <p className="text-foreground text-[10px] font-medium leading-tight line-clamp-1">{ch.name}</p>
+              <p className="text-muted-foreground text-[8px] leading-tight">{ch.category}</p>
             </div>
           ))}
         </div>
