@@ -18,6 +18,7 @@ import Agent from "./pages/Agent";
 import SharedContent from "./pages/SharedContent";
 import AdminDashboard from "./pages/AdminDashboard";
 import SectionPage from "./pages/SectionPage";
+import HowToUse from "./pages/HowToUse";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -43,6 +44,7 @@ const App = () => (
             <Route path="/shared/:shareCode" element={<SharedContent />} />
             <Route path="/section/:sectionId" element={<SectionPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
+            <Route path="/how-to-use" element={<HowToUse />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
           <BottomNav />
