@@ -411,39 +411,24 @@ const Watch = () => {
             )}
           </div>
 
-          {/* Download Button */}
-          {!requiresSubscription && (
-            <div className="px-4 py-2 border-b border-border">
-              <button onClick={handleDownload} className="flex items-center gap-2 bg-primary/10 text-primary px-4 py-2 rounded-lg text-xs font-medium hover:bg-primary/20 transition-colors w-full justify-center">
-                <Download className="w-4 h-4" /> Download Movie / Episode
-              </button>
-            </div>
-          )}
-
           {/* Action bar */}
-          <div className="flex items-center gap-4 px-4 py-2.5 border-b border-border text-xs text-muted-foreground overflow-x-auto">
-            {drama.isVip && (
-              <button className="flex items-center gap-1 text-primary font-medium whitespace-nowrap">
-                <span>VIP</span> · Skip Ads
-              </button>
-            )}
-            <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
-              <MessageSquare className="w-3.5 h-3.5" /> Comments ({comments.length})
-            </button>
-            <button onClick={handleWatchLater} className={`flex items-center gap-1 whitespace-nowrap ${isInWatchLater ? "text-primary" : "hover:text-foreground"}`}>
-              <Clock className="w-3.5 h-3.5" /> {isInWatchLater ? "Saved" : "Watch Later"}
-            </button>
+          <div className="flex items-center gap-4 px-4 py-2.5 border-b border-border text-xs text-muted-foreground">
             <button onClick={handleShare} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
               <Share2 className="w-3.5 h-3.5" /> Share
             </button>
-            <div className="ml-auto flex items-center gap-3 shrink-0">
-              <button onClick={handleWatchOnTV} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
-                <Monitor className="w-3.5 h-3.5" /> Watch on TV
-              </button>
-              <button onClick={handleWatchOnApp} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
-                <Smartphone className="w-3.5 h-3.5" /> Watch on App
-              </button>
-            </div>
+            <button onClick={() => setShowComments(!showComments)} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
+              <MessageSquare className="w-3.5 h-3.5" /> Comments ({comments.length})
+            </button>
+            <button onClick={() => {
+              if (!user) {
+                toast({ title: "Login required", description: "Please login to download", variant: "destructive" });
+                return;
+              }
+              // Check subscription - for now require login
+              handleDownload();
+            }} className="flex items-center gap-1 hover:text-foreground whitespace-nowrap">
+              <Download className="w-3.5 h-3.5" /> Download
+            </button>
           </div>
 
           {/* Comments Section */}
