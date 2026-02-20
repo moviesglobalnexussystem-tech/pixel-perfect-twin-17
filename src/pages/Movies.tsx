@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
 import HeroBanner from "@/components/HeroBanner";
@@ -36,12 +36,37 @@ const isStillAgent = (d: Drama) => {
   return Math.floor((Date.now() - markedAt.getTime()) / (1000 * 60 * 60 * 24)) < 5;
 };
 
+const genreMatch = (genre: string | undefined, filter: string) => {
+  if (!genre) return false;
+  return genre.toLowerCase().includes(filter.toLowerCase());
+};
+
 const Movies = () => {
   const [movies, setMovies] = useState<MovieItem[] | null>(null);
+  const [activeGenre, setActiveGenre] = useState("All Videos");
 
   useEffect(() => {
     return subscribeMovies(setMovies);
   }, []);
+
+  const allDramas = useMemo(() => {
+    if (!movies) return [];
+    return movies
+      .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
+      .map((m, i) => toDrama(m, i)).map(d => {
+        if (isStillAgent(d)) {
+          const markedAt = new Date(d.agentMarkedAt!);
+          const leaveDate = new Date(markedAt.getTime() + 5 * 24 * 60 * 60 * 1000);
+          return { ...d, badge: `Available ${leaveDate.toLocaleDateString()}` };
+        }
+        return d;
+      });
+  }, [movies]);
+
+  const dramas = useMemo(() => {
+    if (activeGenre === "All Videos") return allDramas;
+    return allDramas.filter(d => genreMatch(d.genre, activeGenre));
+  }, [allDramas, activeGenre]);
 
   if (movies === null) {
     return (
@@ -50,17 +75,6 @@ const Movies = () => {
       </div>
     );
   }
-
-  const dramas = movies
-    .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
-    .map((m, i) => toDrama(m, i)).map(d => {
-    if (isStillAgent(d)) {
-      const markedAt = new Date(d.agentMarkedAt!);
-      const leaveDate = new Date(markedAt.getTime() + 5 * 24 * 60 * 60 * 1000);
-      return { ...d, badge: `Available ${leaveDate.toLocaleDateString()}` };
-    }
-    return d;
-  });
 
   const popular = dramas.filter(d => movies.find(m => m.id === d.firebaseId)?.isPopular);
   const comingSoon = dramas.filter(d => d.badge && (d.badge.startsWith("Coming") || d.badge.startsWith("Available")));
@@ -73,7 +87,7 @@ const Movies = () => {
   return (
     <div className="min-h-screen bg-background">
       <HeroBanner page="movies" compact />
-      <GenreTags />
+      <GenreTags activeGenre={activeGenre} onGenreChange={setActiveGenre} />
       {dramas.length > 0 && <ContentRow title="🎬 All Movies" dramas={dramas} />}
       {popular.length > 0 && <ContentRow title="Popular Movies" dramas={popular} />}
       {topTen.length > 0 && <ContentRow title="Top Rated" dramas={topTen} showRank />}
@@ -85,8 +99,8 @@ const Movies = () => {
       {dramas.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
           <span className="text-4xl mb-4">🎬</span>
-          <p className="text-sm font-medium">No movies uploaded yet</p>
-          <p className="text-xs mt-1">Check back soon or visit Admin to upload</p>
+          <p className="text-sm font-medium">{activeGenre === "All Videos" ? "No movies uploaded yet" : `No movies found for "${activeGenre}"`}</p>
+          <p className="text-xs mt-1">{activeGenre === "All Videos" ? "Check back soon or visit Admin to upload" : "Try a different genre filter"}</p>
         </div>
       )}
     </div>
