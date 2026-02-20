@@ -145,17 +145,17 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
   }, [resetHideTimer]);
 
   return (
-    <div className="px-4 md:px-8 mb-6">
+    <div className="mb-6">
       <div
         ref={wrapperRef}
-        className="relative w-full bg-black rounded-2xl overflow-hidden border border-border shadow-2xl shadow-black/50 group select-none"
+        className="relative w-full bg-black overflow-hidden md:mx-4 md:rounded-2xl md:border md:border-border md:shadow-2xl md:shadow-black/50 group select-none"
         style={{ aspectRatio: "16/9", maxHeight: isFullscreen ? "100vh" : "520px" }}
         onMouseMove={resetHideTimer}
         onTouchStart={resetHideTimer}
       >
         <video
           ref={videoRef}
-          className="w-full h-full object-contain bg-black"
+          className="w-full h-full object-cover bg-black"
           playsInline
           autoPlay
           onClick={togglePlay}
@@ -173,12 +173,9 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
           </div>
         )}
 
-        {/* LIVE badge */}
+        {/* LIVE dot */}
         <div className="absolute top-3 left-3 z-30">
-          <span className="flex items-center gap-1.5 bg-destructive/90 text-destructive-foreground text-[10px] font-bold px-2.5 py-1 rounded-md backdrop-blur-sm">
-            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
-            LIVE
-          </span>
+          <span className="w-2.5 h-2.5 bg-destructive rounded-full animate-pulse block shadow-lg shadow-destructive/50" />
         </div>
 
         {/* Custom controls overlay */}
@@ -221,7 +218,7 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
         </div>
       </div>
 
-      <div className="mt-3 flex items-center gap-3 px-1">
+      <div className="mt-3 flex items-center gap-3 px-4 md:px-8">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
           <span className="text-foreground text-sm font-bold">{name}</span>
