@@ -2,6 +2,7 @@ import { Play, Plus } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { subscribeCarousels } from "@/lib/firebaseServices";
 import type { CarouselItem } from "@/data/adminData";
+import LogoLoader from "@/components/LogoLoader";
 
 const HeroBanner = () => {
   const [carousels, setCarousels] = useState<CarouselItem[] | null>(null);
@@ -36,7 +37,9 @@ const HeroBanner = () => {
   // Loading state
   if (carousels === null) {
     return (
-      <div className="relative w-full aspect-[16/7] bg-card animate-pulse rounded-b-lg" />
+      <div className="relative w-full aspect-[16/7] bg-card rounded-b-lg flex items-center justify-center">
+        <LogoLoader text="Loading banner..." />
+      </div>
     );
   }
 

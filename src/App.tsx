@@ -15,6 +15,7 @@ import LiveSport from "./pages/LiveSport";
 import Agent from "./pages/Agent";
 import SharedContent from "./pages/SharedContent";
 import AdminDashboard from "./pages/AdminDashboard";
+import SectionPage from "./pages/SectionPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,6 +37,7 @@ const App = () => (
             <Route path="/live-sport" element={<LiveSport />} />
             <Route path="/agent" element={<Agent />} />
             <Route path="/shared/:shareCode" element={<SharedContent />} />
+            <Route path="/section/:sectionId" element={<SectionPage />} />
             <Route path="/admin" element={<AdminDashboard />} />
             <Route path="*" element={<NotFound />} />
           </Routes>
