@@ -64,16 +64,18 @@ const HeroBanner = ({ page = "home", compact = false }: HeroBannerProps) => {
         />
       ))}
 
-      <div className="absolute bottom-4 md:bottom-6 left-3 md:left-10 z-10">
-        <div className="flex items-center gap-1.5">
-          <button className="flex items-center gap-1 bg-primary text-primary-foreground px-3 md:px-5 py-1.5 md:py-2 rounded-full font-semibold text-[10px] md:text-xs hover:opacity-90 transition-opacity shadow-lg">
-            <Play className="w-3 h-3 md:w-3.5 md:h-3.5 fill-current" /> Play
-          </button>
-          <button className="flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-full border border-muted-foreground/40 text-foreground hover:border-foreground transition-colors bg-card/30 backdrop-blur-sm">
-            <Plus className="w-3 h-3 md:w-4 md:h-4" />
-          </button>
+      {!compact && (
+        <div className="absolute bottom-4 md:bottom-6 left-3 md:left-10 z-10">
+          <div className="flex items-center gap-1.5">
+            <button className="flex items-center gap-1 bg-primary text-primary-foreground px-3 md:px-5 py-1.5 md:py-2 rounded-full font-semibold text-[10px] md:text-xs hover:opacity-90 transition-opacity shadow-lg">
+              <Play className="w-3 h-3 md:w-3.5 md:h-3.5 fill-current" /> Play
+            </button>
+            <button className="flex items-center justify-center w-6 h-6 md:w-8 md:h-8 rounded-full border border-muted-foreground/40 text-foreground hover:border-foreground transition-colors bg-card/30 backdrop-blur-sm">
+              <Plus className="w-3 h-3 md:w-4 md:h-4" />
+            </button>
+          </div>
         </div>
-      </div>
+      )}
 
       {slides.length > 1 && (
         <div className="absolute bottom-4 right-4 md:right-10 flex gap-1.5">
