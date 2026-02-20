@@ -13,6 +13,7 @@ import {
 import type { SharedLink } from "@/lib/firebaseServices";
 import type { MovieItem } from "@/data/adminData";
 import ArtPlayerComponent from "@/components/ArtPlayerComponent";
+import { requestDeposit, pollPaymentStatus } from "@/lib/livraPayment";
 
 // Device fingerprint for audience "login"
 const getDeviceId = (): string => {
@@ -62,6 +63,8 @@ const AudiencePage = () => {
   const [agentName, setAgentName] = useState("");
   const [relatedLinks, setRelatedLinks] = useState<SharedLink[]>([]);
   const [relatedMovies, setRelatedMovies] = useState<MovieItem[]>([]);
+  const [statusMessage, setStatusMessage] = useState("");
+  const cancelPollRef = useState<(() => void) | null>(null);
   const accessDuration = (content as any)?.accessDuration || 60;
 
   // Load content
@@ -130,42 +133,76 @@ const AudiencePage = () => {
       return;
     }
     setStep("processing");
+    setStatusMessage("Sending payment prompt to your phone...");
+    
     try {
-      await addTransaction({
-        userId: getDeviceId(),
-        userName: phoneNumber,
-        userPhone: phoneNumber,
-        type: "agent-share",
-        amount: content.price,
-        status: "completed",
-        method: provider,
-        createdAt: new Date().toISOString().split("T")[0],
-      } as any);
-      await updateSharedLink(content.id, {
-        views: (content.views || 0) + 1,
-        earnings: (content.earnings || 0) + content.price,
-      });
-
-      // Credit the agent's balance in Firebase
-      try {
-        const agent = await getAgentByAgentId(content.agentId);
-        if (agent) {
-          const { updateAgent } = await import("@/lib/firebaseServices");
-          await updateAgent(agent.id, {
-            balance: (agent.balance || 0) + content.price,
-            totalEarnings: (agent.totalEarnings || 0) + content.price,
-          });
-        }
-      } catch (e) {
-        console.error("Failed to credit agent balance:", e);
+      const description = `LUO FILM: ${content.contentTitle} (${accessDuration}min access)`;
+      const result = await requestDeposit(phoneNumber, content.price, description);
+      
+      if (!result.success || !result.internal_reference) {
+        toast({ title: "Payment failed", description: result.error || "Could not initiate payment", variant: "destructive" });
+        setStep("payment");
+        return;
       }
 
-      grantAccess(shareCode!, accessDuration);
-      setStep("success");
-      setTimeout(() => {
-        setStep("watching");
-        setTimeLeft(accessDuration * 60);
-      }, 2000);
+      setStatusMessage("Waiting for you to confirm payment on your phone...");
+
+      // Poll for payment status
+      const cancelPoll = pollPaymentStatus(
+        result.internal_reference,
+        async (statusData) => {
+          // Payment successful!
+          try {
+            await addTransaction({
+              userId: getDeviceId(),
+              userName: phoneNumber,
+              userPhone: phoneNumber,
+              type: "agent-share",
+              amount: content.price,
+              status: "completed",
+              method: `Mobile Money (Livra)`,
+              description: `Agent sell: ${content.contentTitle}`,
+              livraRef: result.internal_reference,
+              createdAt: new Date().toISOString().split("T")[0],
+            } as any);
+
+            await updateSharedLink(content.id, {
+              views: (content.views || 0) + 1,
+              earnings: (content.earnings || 0) + content.price,
+            });
+
+            // Credit the agent's balance
+            try {
+              const agent = await getAgentByAgentId(content.agentId);
+              if (agent) {
+                const { updateAgent } = await import("@/lib/firebaseServices");
+                await updateAgent(agent.id, {
+                  balance: (agent.balance || 0) + content.price,
+                  totalEarnings: (agent.totalEarnings || 0) + content.price,
+                });
+              }
+            } catch (e) {
+              console.error("Failed to credit agent balance:", e);
+            }
+
+            grantAccess(shareCode!, accessDuration);
+            setStep("success");
+            setTimeout(() => {
+              setStep("watching");
+              setTimeLeft(accessDuration * 60);
+            }, 2000);
+          } catch (err: any) {
+            toast({ title: "Error", description: err.message, variant: "destructive" });
+            setStep("payment");
+          }
+        },
+        (errorMsg) => {
+          toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
+          setStep("payment");
+        },
+        60,
+        5000
+      );
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
       setStep("payment");
@@ -367,7 +404,8 @@ const AudiencePage = () => {
             <div className="bg-card border border-border rounded-2xl p-8 text-center space-y-4 shadow-lg">
               <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
               <p className="text-foreground text-sm font-semibold">Processing Payment</p>
-              <p className="text-muted-foreground text-[10px]">Please wait...</p>
+              <p className="text-muted-foreground text-[10px]">{statusMessage || "Waiting for confirmation..."}</p>
+              <p className="text-muted-foreground text-[9px]">Check your phone and enter your PIN</p>
             </div>
           )}
 

@@ -142,6 +142,10 @@ export const getUserByEmail = async (email: string): Promise<UserItem | null> =>
   const items = await getCollection<UserItem>("users", where("email", "==", email));
   return items[0] || null;
 };
+export const getUserByUid = async (uid: string): Promise<UserItem | null> => {
+  const items = await getCollection<UserItem>("users", where("uid", "==", uid));
+  return items[0] || null;
+};
 export const addUser = (data: Omit<UserItem, "id">) => addItem("users", data);
 export const updateUser = (id: string, data: Partial<UserItem>) => updateItem("users", id, data);
 export const deleteUser = (id: string) => deleteItem("users", id);

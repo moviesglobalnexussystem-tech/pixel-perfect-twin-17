@@ -1,7 +1,9 @@
-import { useState } from "react";
-import { X, Crown, Phone, CheckCircle, Smartphone } from "lucide-react";
-import { addAgent, generateAgentId, addTransaction } from "@/lib/firebaseServices";
+import { useState, useEffect, useRef } from "react";
+import { X, Crown, Phone, CheckCircle, Smartphone, Loader2 } from "lucide-react";
+import { addAgent, generateAgentId, addTransaction, getUserByUid, updateUser } from "@/lib/firebaseServices";
+import { requestDeposit, pollPaymentStatus } from "@/lib/livraPayment";
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface SubscribeModalProps {
   open: boolean;
@@ -10,23 +12,30 @@ interface SubscribeModalProps {
 }
 
 const userPlans = [
-  { id: "1day", label: "1 Day", price: "5,000", priceNum: 5000, duration: "24 hours access" },
-  { id: "1week", label: "1 Week", price: "10,000", priceNum: 10000, duration: "7 days access" },
-  { id: "1month", label: "1 Month", price: "25,000", priceNum: 25000, duration: "30 days access" },
+  { id: "1day", label: "1 Day", price: "5,000", priceNum: 5000, duration: "24 hours access", days: 1 },
+  { id: "1week", label: "1 Week", price: "10,000", priceNum: 10000, duration: "7 days access", days: 7 },
+  { id: "1month", label: "1 Month", price: "25,000", priceNum: 25000, duration: "30 days access", days: 30 },
 ];
 
 const agentPlans = [
-  { id: "agent-1week", label: "1 Week", price: "25,000", priceNum: 25000, duration: "7 days Agent access" },
-  { id: "agent-1month", label: "1 Month", price: "50,000", priceNum: 50000, duration: "30 days Agent access" },
+  { id: "agent-1week", label: "1 Week", price: "25,000", priceNum: 25000, duration: "7 days Agent access", days: 7 },
+  { id: "agent-1month", label: "1 Month", price: "50,000", priceNum: 50000, duration: "30 days Agent access", days: 30 },
 ];
 
 const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) => {
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [name, setName] = useState("");
-  const [step, setStep] = useState<"plan" | "pay" | "processing" | "success">("plan");
+  const [step, setStep] = useState<"plan" | "pay" | "processing" | "success" | "failed">("plan");
   const [generatedAgentId, setGeneratedAgentId] = useState("");
+  const [statusMessage, setStatusMessage] = useState("Sending payment prompt to your phone...");
   const { toast } = useToast();
+  const { user } = useAuth();
+  const cancelPollRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    return () => { cancelPollRef.current?.(); };
+  }, []);
 
   if (!open) return null;
 
@@ -38,73 +47,124 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneNumber.length < 10) return;
+    if (phoneNumber.length < 10 || !selectedPlan) return;
+
+    const planInfo = plans.find(p => p.id === selectedPlan);
+    if (!planInfo) return;
 
     setStep("processing");
+    setStatusMessage("Sending payment prompt to your phone...");
 
     try {
-      if (mode === "agent") {
-        // Create agent in Firestore
-        const newAgentId = generateAgentId();
-        const planInfo = plans.find(p => p.id === selectedPlan);
-        const now = new Date();
-        const expiry = new Date(now);
-        if (selectedPlan?.includes("month")) {
-          expiry.setMonth(expiry.getMonth() + 1);
-        } else {
-          expiry.setDate(expiry.getDate() + 7);
-        }
+      const description = mode === "agent"
+        ? `LUO FILM Agent ${planInfo.label} Plan`
+        : `LUO FILM ${planInfo.label} Subscription`;
 
-        await addAgent({
-          name: name || phoneNumber,
-          phone: phoneNumber,
-          agentId: newAgentId,
-          balance: 0,
-          sharedMovies: 0,
-          sharedSeries: 0,
-          totalEarnings: 0,
-          status: "active",
-          plan: planInfo?.label || "Weekly",
-          planExpiry: expiry.toISOString().split("T")[0],
-          createdAt: now.toISOString().split("T")[0],
-        } as any);
+      const result = await requestDeposit(phoneNumber, planInfo.priceNum, description);
 
-        // Record transaction
-        await addTransaction({
-          userId: "",
-          userName: name || phoneNumber,
-          userPhone: phoneNumber,
-          type: "subscription",
-          amount: planInfo?.priceNum || 0,
-          status: "completed",
-          method: "Mobile Money",
-          createdAt: now.toISOString().split("T")[0],
-        } as any);
-
-        setGeneratedAgentId(newAgentId);
-      } else {
-        // Record user subscription transaction
-        const planInfo = plans.find(p => p.id === selectedPlan);
-        await addTransaction({
-          userId: "",
-          userName: phoneNumber,
-          userPhone: phoneNumber,
-          type: "subscription",
-          amount: planInfo?.priceNum || 0,
-          status: "completed",
-          method: "Mobile Money",
-          createdAt: new Date().toISOString().split("T")[0],
-        } as any);
+      if (!result.success || !result.internal_reference) {
+        toast({ title: "Payment failed", description: result.error || "Could not initiate payment", variant: "destructive" });
+        setStep("failed");
+        return;
       }
 
-      setStep("success");
+      setStatusMessage("Waiting for you to confirm payment on your phone...");
+
+      // Poll for payment status
+      cancelPollRef.current = pollPaymentStatus(
+        result.internal_reference,
+        async (statusData) => {
+          // Payment successful!
+          setStatusMessage("Payment confirmed! Setting up your account...");
+
+          try {
+            if (mode === "agent") {
+              const newAgentId = generateAgentId();
+              const now = new Date();
+              const expiry = new Date(now);
+              expiry.setDate(expiry.getDate() + planInfo.days);
+
+              await addAgent({
+                name: name || phoneNumber,
+                phone: phoneNumber,
+                agentId: newAgentId,
+                balance: 0,
+                sharedMovies: 0,
+                sharedSeries: 0,
+                totalEarnings: 0,
+                status: "active",
+                plan: planInfo.label,
+                planExpiry: expiry.toISOString().split("T")[0],
+                createdAt: now.toISOString().split("T")[0],
+              } as any);
+
+              await addTransaction({
+                userId: "",
+                userName: name || phoneNumber,
+                userPhone: phoneNumber,
+                type: "subscription",
+                amount: planInfo.priceNum,
+                status: "completed",
+                method: "Mobile Money (Livra)",
+                description: `Agent ${planInfo.label} Plan`,
+                livraRef: result.internal_reference,
+                createdAt: now.toISOString().split("T")[0],
+              } as any);
+
+              setGeneratedAgentId(newAgentId);
+            } else {
+              // User subscription - update Firestore user record
+              const now = new Date();
+              const expiry = new Date(now);
+              expiry.setDate(expiry.getDate() + planInfo.days);
+
+              if (user) {
+                const userDoc = await getUserByUid(user.uid);
+                if (userDoc) {
+                  const { updateUser } = await import("@/lib/firebaseServices");
+                  await updateUser(userDoc.id, {
+                    subscription: planInfo.label,
+                    subscriptionExpiry: expiry.toISOString().split("T")[0],
+                    status: "active",
+                  });
+                }
+              }
+
+              await addTransaction({
+                userId: user?.uid || "",
+                userName: user?.displayName || phoneNumber,
+                userPhone: phoneNumber,
+                type: "subscription",
+                amount: planInfo.priceNum,
+                status: "completed",
+                method: "Mobile Money (Livra)",
+                description: `User ${planInfo.label} Subscription`,
+                livraRef: result.internal_reference,
+                createdAt: now.toISOString().split("T")[0],
+              } as any);
+            }
+
+            setStep("success");
+          } catch (err: any) {
+            toast({ title: "Account setup error", description: err.message, variant: "destructive" });
+            setStep("failed");
+          }
+        },
+        (errorMsg) => {
+          toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
+          setStep("failed");
+        },
+        60, // max 60 attempts
+        5000 // every 5 seconds = 5 min max
+      );
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
-      setStep("pay");
+      setStep("failed");
     }
   };
 
   const handleClose = () => {
+    cancelPollRef.current?.();
     setStep("plan");
     setSelectedPlan(null);
     setPhoneNumber("");
@@ -189,11 +249,15 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
 
         {step === "processing" && (
           <div className="px-6 pb-6 text-center space-y-4">
-            <div className="w-12 h-12 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+            <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
             <div>
-              <p className="text-foreground font-bold text-base">Processing...</p>
-              <p className="text-muted-foreground text-xs mt-1">Creating your subscription</p>
+              <p className="text-foreground font-bold text-base">Processing Payment</p>
+              <p className="text-muted-foreground text-xs mt-1">{statusMessage}</p>
+              <p className="text-muted-foreground text-[10px] mt-2">Check your phone for the payment prompt and enter your PIN.</p>
             </div>
+            <button onClick={handleClose} className="text-muted-foreground text-[10px] hover:text-foreground">
+              Cancel
+            </button>
           </div>
         )}
 
@@ -205,11 +269,27 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
               <p className="text-muted-foreground text-xs mt-1">
                 {mode === "agent"
                   ? <>Your Agent ID: <span className="text-primary font-bold text-base">{generatedAgentId}</span><br/><span className="text-[10px]">Save this ID — you'll use it to log in to the Agent Dashboard</span></>
-                  : "Enjoy unlimited streaming"}
+                  : "Your subscription is now active. Enjoy unlimited streaming!"}
               </p>
             </div>
             <button onClick={handleClose} className="w-full h-10 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 transition-colors">
               {mode === "agent" ? "Done" : "Start Watching"}
+            </button>
+          </div>
+        )}
+
+        {step === "failed" && (
+          <div className="px-6 pb-6 text-center space-y-4">
+            <X className="w-12 h-12 text-destructive mx-auto" />
+            <div>
+              <p className="text-foreground font-bold text-base">Payment Failed</p>
+              <p className="text-muted-foreground text-xs mt-1">The payment was not completed. Please try again.</p>
+            </div>
+            <button onClick={() => setStep("pay")} className="w-full h-10 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 transition-colors">
+              Try Again
+            </button>
+            <button onClick={handleClose} className="w-full text-muted-foreground text-xs text-center hover:text-foreground">
+              Cancel
             </button>
           </div>
         )}
