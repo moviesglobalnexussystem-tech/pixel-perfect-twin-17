@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Film, Tv, Radio, Trophy, ShieldCheck, Download, HelpCircle } from "lucide-react";
+import { Film, Tv, Radio, Trophy, ShieldCheck, Download } from "lucide-react";
 import { useState } from "react";
 import AgentAccessModal from "./AgentAccessModal";
 import SubscribeModal from "./SubscribeModal";
@@ -38,22 +38,16 @@ const BottomNav = () => {
       <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
         {/* Glassmorphism background */}
         <div className="bg-card/95 backdrop-blur-xl border-t border-border/60 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
-          <div className="flex border-b border-border/60">
-            <button
-              onClick={() => navigate("/how-to-use")}
-              className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-secondary/50 text-foreground text-[10px] font-medium active:scale-[0.98] transition-transform border-r border-border/40"
-            >
-              <HelpCircle className="w-3 h-3" /> How to Use
-            </button>
-            {canInstall && (
+          {canInstall && (
+            <div className="flex border-b border-border/60">
               <button
                 onClick={install}
                 className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gradient-to-r from-primary/20 to-primary/10 text-primary text-[10px] font-bold active:scale-[0.98] transition-transform"
               >
                 <Download className="w-3 h-3" /> Install App
               </button>
-            )}
-          </div>
+            </div>
+          )}
           <div className="flex items-end justify-around px-2 pb-[env(safe-area-inset-bottom)] relative">
             {navItems.map((item) => {
               const Icon = item.icon;
