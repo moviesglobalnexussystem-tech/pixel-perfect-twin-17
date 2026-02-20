@@ -38,6 +38,7 @@ const AgentWatch = () => {
   const [isProcessing, setIsProcessing] = useState(false);
   const [sharedLinks, setSharedLinks] = useState<SharedLink[]>([]);
   const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [episodes, setEpisodes] = useState<EpisodeItem[]>([]);
   const [currentEpisode, setCurrentEpisode] = useState<EpisodeItem | null>(null);
   const [relatedMovies, setRelatedMovies] = useState<MovieItem[]>([]);
@@ -122,32 +123,45 @@ const AgentWatch = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  const [isDownloading, setIsDownloading] = useState(false);
+  
 
   const handleDownload = async () => {
     if (!downloadLink) {
       toast({ title: "No download available", variant: "destructive" });
       return;
     }
+    const fileName = currentEpisode
+      ? `${title} - Episode ${currentEpisode.episodeNumber}.mp4`
+      : `${title}.mp4`;
     setIsDownloading(true);
-    toast({ title: "Starting download...", description: "Please wait while the video is being prepared." });
+    toast({ title: "Preparing download...", description: "Fetching video file..." });
     try {
-      const response = await fetch(downloadLink);
+      const response = await fetch(downloadLink, { mode: "cors" });
+      if (!response.ok) throw new Error("CORS_BLOCKED");
       const blob = await response.blob();
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
-      const fileName = currentEpisode
-        ? `${title} - Episode ${currentEpisode.episodeNumber}.mp4`
-        : `${title}.mp4`;
       a.download = fileName;
+      a.style.display = "none";
       document.body.appendChild(a);
       a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      }, 1000);
       toast({ title: "Download started!", description: fileName });
-    } catch (err: any) {
-      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    } catch {
+      const a = document.createElement("a");
+      a.href = downloadLink;
+      a.download = fileName;
+      a.target = "_self";
+      a.rel = "noopener";
+      a.style.display = "none";
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => document.body.removeChild(a), 1000);
+      toast({ title: "Download started!", description: fileName });
     }
     setIsDownloading(false);
   };
