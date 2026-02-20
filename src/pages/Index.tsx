@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import HeroBanner from "@/components/HeroBanner";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
-import AppBanner from "@/components/AppBanner";
+
 import LogoLoader from "@/components/LogoLoader";
 
 import { subscribeMovies, subscribeSeries } from "@/lib/firebaseServices";
@@ -130,7 +130,7 @@ const Index = () => {
         {highQuality.length > 0 && <ContentRow title="High-quality Dramas" dramas={highQuality} />}
         {hotDrama.length > 0 && <ContentRow title="🔥 Hot Dramas" dramas={hotDrama} />}
         {sweetRomance.length > 0 && <ContentRow title="Sweet Romance" dramas={sweetRomance} titleColor="hsl(30, 100%, 50%)" />}
-        <AppBanner />
+        
         {ancientCostume.length > 0 && <ContentRow title="Ancient Costume" dramas={ancientCostume} titleColor="hsl(30, 100%, 50%)" />}
         {displayAll.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
