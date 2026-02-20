@@ -1,8 +1,111 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { subscribeTVChannels, subscribeLatestUpdates } from "@/lib/firebaseServices";
 import type { TVChannelItem, LatestUpdateItem } from "@/data/adminData";
-import ShakaPlayerComponent from "@/components/ShakaPlayerComponent";
+import Artplayer from "artplayer";
+import Hls from "hls.js";
 import logo from "@/assets/logo.png";
+
+interface TVPlayerProps {
+  src: string;
+  name: string;
+  category: string;
+  onClose: () => void;
+}
+
+const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const artRef = useRef<Artplayer | null>(null);
+
+  useEffect(() => {
+    if (!containerRef.current || !src) return;
+
+    const isHLS = src.includes(".m3u8");
+
+    const art = new Artplayer({
+      container: containerRef.current,
+      url: src,
+      autoplay: true,
+      theme: "hsl(135, 100%, 37%)",
+      fullscreen: true,
+      fullscreenWeb: true,
+      pip: true,
+      setting: true,
+      playbackRate: true,
+      aspectRatio: true,
+      miniProgressBar: true,
+      mutex: true,
+      backdrop: true,
+      hotkey: true,
+      fastForward: true,
+      lock: true,
+      isLive: isHLS,
+      layers: [
+        {
+          name: "watermark",
+          html: `<img src="${logo}" style="width:32px;height:32px;border-radius:6px;opacity:0.6;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));" />`,
+          tooltip: "LUO FILM",
+          style: {
+            position: "absolute",
+            top: "12px",
+            right: "12px",
+            zIndex: "50",
+            pointerEvents: "none",
+          },
+        },
+      ],
+      ...(isHLS && Hls.isSupported()
+        ? {
+            customType: {
+              m3u8: (video: HTMLVideoElement, url: string) => {
+                const hls = new Hls({
+                  enableWorker: true,
+                  lowLatencyMode: true,
+                  maxBufferLength: 10,
+                  maxMaxBufferLength: 20,
+                  startFragPrefetch: true,
+                  testBandwidth: true,
+                });
+                hls.loadSource(url);
+                hls.attachMedia(video);
+                hls.on(Hls.Events.MANIFEST_PARSED, () => {
+                  video.play().catch(() => {});
+                });
+                art.on("destroy", () => hls.destroy());
+              },
+            },
+          }
+        : {}),
+    });
+
+    artRef.current = art;
+
+    return () => {
+      if (artRef.current) {
+        artRef.current.destroy(false);
+        artRef.current = null;
+      }
+    };
+  }, [src]);
+
+  return (
+    <div className="px-4 md:px-8 mb-6">
+      <div
+        ref={containerRef}
+        className="w-full rounded-2xl overflow-hidden border border-border shadow-2xl shadow-black/50"
+        style={{ aspectRatio: "16/9", maxHeight: "520px" }}
+      />
+      <div className="mt-3 flex items-center gap-3 px-1">
+        <div className="flex items-center gap-2">
+          <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+          <span className="text-foreground text-sm font-bold">{name}</span>
+        </div>
+        <span className="text-muted-foreground text-xs bg-secondary px-2 py-0.5 rounded-full">{category}</span>
+        <button onClick={onClose} className="ml-auto text-muted-foreground hover:text-destructive text-xs font-medium transition-colors">✕ Close</button>
+      </div>
+    </div>
+  );
+};
+
 
 const TVChannel = () => {
   const [channels, setChannels] = useState<TVChannelItem[]>([]);
@@ -20,25 +123,12 @@ const TVChannel = () => {
       <div className="h-3" />
 
       {activeChannel && activeChannel.streamLink && (
-        <div className="px-4 md:px-8 mb-6">
-          <div className="relative w-full bg-black rounded-2xl overflow-hidden border border-border shadow-2xl shadow-black/50" style={{ aspectRatio: "16/9", maxHeight: "520px" }}>
-            <ShakaPlayerComponent key={activeChannel.streamLink} src={activeChannel.streamLink} autoplay />
-            {/* Watermark logo */}
-            <div className="absolute top-3 right-3 z-20 pointer-events-none opacity-60">
-              <img src={logo} alt="LUO FILM" className="w-8 h-8 rounded-md object-contain drop-shadow-lg" />
-            </div>
-            {/* Top gradient overlay for watermark visibility */}
-            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent pointer-events-none z-10" />
-          </div>
-          <div className="mt-3 flex items-center gap-3 px-1">
-            <div className="flex items-center gap-2">
-              <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
-              <span className="text-foreground text-sm font-bold">{activeChannel.name}</span>
-            </div>
-            <span className="text-muted-foreground text-xs bg-secondary px-2 py-0.5 rounded-full">{activeChannel.category}</span>
-            <button onClick={() => setActiveChannel(null)} className="ml-auto text-muted-foreground hover:text-destructive text-xs font-medium transition-colors">✕ Close</button>
-          </div>
-        </div>
+        <TVPlayer
+          src={activeChannel.streamLink}
+          name={activeChannel.name}
+          category={activeChannel.category}
+          onClose={() => setActiveChannel(null)}
+        />
       )}
 
       {channels.length > 0 ? (
