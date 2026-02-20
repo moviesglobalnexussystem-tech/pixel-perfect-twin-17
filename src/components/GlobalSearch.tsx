@@ -52,9 +52,21 @@ const GlobalSearch = () => {
   const handleSelect = (r: SearchResult) => {
     setOpen(false);
     setQuery("");
-    if (r.type === "movie") navigate(`/watch/${r.id}`, { state: { firebaseId: r.id, title: r.title, image: r.image } });
-    else if (r.type === "series") navigate(`/watch/${r.id}`, { state: { firebaseId: r.id, title: r.title, image: r.image } });
-    else navigate("/tv-channel");
+    if (r.type === "movie") {
+      navigate(`/watch/${r.id}`, { state: { firebaseId: r.id, title: r.title, image: r.image } });
+    } else if (r.type === "series") {
+      const s = series.find(s => s.id === r.id);
+      navigate(`/watch/${r.id}`, {
+        state: {
+          firebaseId: r.id, title: r.title, image: r.image,
+          episodes: s ? `${s.totalEpisodes || 0} Episodes` : "Episodes",
+          genre: s?.genre, rating: s?.rating, description: s?.description,
+          actors: s?.actors, isVip: s?.isVip,
+        }
+      });
+    } else {
+      navigate("/tv-channel", { state: { channelId: r.id } });
+    }
   };
 
   const TypeIcon = ({ type }: { type: string }) => {

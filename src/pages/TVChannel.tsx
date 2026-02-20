@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { Newspaper } from "lucide-react";
 import { subscribeTVChannels, subscribeLatestUpdates } from "@/lib/firebaseServices";
 import type { TVChannelItem, LatestUpdateItem } from "@/data/adminData";
@@ -252,15 +253,29 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
 
 
 const TVChannel = () => {
+  const location = useLocation();
   const [channels, setChannels] = useState<TVChannelItem[] | null>(null);
   const [activeChannel, setActiveChannel] = useState<TVChannelItem | null>(null);
   const [latestUpdates, setLatestUpdates] = useState<LatestUpdateItem[]>([]);
+  const autoPlayedRef = useRef(false);
+
+  const navState = location.state as { channelId?: string } | null;
 
   useEffect(() => {
-    const unsub1 = subscribeTVChannels((chs) => setChannels(chs));
+    const unsub1 = subscribeTVChannels((chs) => {
+      setChannels(chs);
+      // Auto-select channel from search navigation
+      if (navState?.channelId && !autoPlayedRef.current) {
+        const target = chs.find(c => c.id === navState.channelId);
+        if (target?.streamLink) {
+          setActiveChannel(target);
+          autoPlayedRef.current = true;
+        }
+      }
+    });
     const unsub2 = subscribeLatestUpdates(setLatestUpdates);
     return () => { unsub1(); unsub2(); };
-  }, []);
+  }, [navState?.channelId]);
 
   if (channels === null) {
     return (
