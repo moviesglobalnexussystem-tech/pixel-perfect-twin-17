@@ -2,24 +2,9 @@ import { Play, Plus } from "lucide-react";
 import { useState, useEffect, useCallback } from "react";
 import { subscribeCarousels } from "@/lib/firebaseServices";
 import type { CarouselItem } from "@/data/adminData";
-import heroBanner from "@/assets/hero-banner.jpg";
-
-// Static fallback slide shown when no Firebase carousels are active
-const fallbackSlide = {
-  image: heroBanner,
-  title: "Welcome to\nLUO FILM",
-  badges: ["VIP", "Exclusive"],
-  genre: "Drama",
-  rating: "9.0",
-  year: "2026",
-  age: "13+",
-  status: "Now Streaming",
-  tags: ["Movies", "Series", "Live Sport"],
-  desc: "Stream the best movies, series and live sports on LUO FILM – your ultimate entertainment platform.",
-};
 
 const HeroBanner = () => {
-  const [carousels, setCarousels] = useState<CarouselItem[]>([]);
+  const [carousels, setCarousels] = useState<CarouselItem[] | null>(null);
   const [current, setCurrent] = useState(0);
 
   useEffect(() => {
@@ -28,41 +13,46 @@ const HeroBanner = () => {
     });
   }, []);
 
-  const slides = carousels.length > 0
+  const slides = carousels && carousels.length > 0
     ? carousels.map(c => ({
-        image: c.imageUrl || heroBanner,
+        image: c.imageUrl,
         title: c.title,
         badges: [c.hotWord].filter(Boolean),
-        genre: "",
-        rating: "",
-        year: "",
-        age: "",
         status: c.subtitle,
-        tags: [],
         desc: c.subtitle,
       }))
-    : [fallbackSlide];
+    : [];
 
   const next = useCallback(() => {
-    setCurrent((c) => (c + 1) % slides.length);
+    if (slides.length > 0) setCurrent((c) => (c + 1) % slides.length);
   }, [slides.length]);
 
   useEffect(() => {
+    if (slides.length <= 1) return;
     const timer = setInterval(next, 5000);
     return () => clearInterval(timer);
-  }, [next]);
+  }, [next, slides.length]);
 
-  const slide = slides[current] || fallbackSlide;
+  // Loading state
+  if (carousels === null) {
+    return (
+      <div className="relative w-full aspect-[16/7] bg-card animate-pulse rounded-b-lg" />
+    );
+  }
+
+  // No carousels from Firebase
+  if (slides.length === 0) return null;
+
+  const slide = slides[current];
 
   return (
-    <div className="relative w-full aspect-[16/7] overflow-hidden bg-black">
+    <div className="relative w-full aspect-[16/7] overflow-hidden bg-card">
       {slides.map((s, i) => (
         <img
           key={i}
           src={s.image}
           alt={s.title}
           className={`absolute inset-0 w-full h-full object-cover transition-opacity duration-700 ${i === current ? "opacity-100" : "opacity-0"}`}
-          onError={(e) => { (e.target as HTMLImageElement).src = heroBanner; }}
         />
       ))}
 
@@ -71,7 +61,7 @@ const HeroBanner = () => {
           <button className="flex items-center gap-1.5 bg-primary text-primary-foreground px-5 py-2 rounded-full font-semibold text-xs hover:opacity-90 transition-opacity shadow-lg">
             <Play className="w-3.5 h-3.5 fill-current" /> Play
           </button>
-          <button className="flex items-center justify-center w-8 h-8 rounded-full border border-muted-foreground/40 text-foreground hover:border-foreground transition-colors bg-black/30 backdrop-blur-sm">
+          <button className="flex items-center justify-center w-8 h-8 rounded-full border border-muted-foreground/40 text-foreground hover:border-foreground transition-colors bg-card/30 backdrop-blur-sm">
             <Plus className="w-4 h-4" />
           </button>
         </div>

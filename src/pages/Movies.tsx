@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
+import LogoLoader from "@/components/LogoLoader";
 import { subscribeMovies } from "@/lib/firebaseServices";
 import type { MovieItem } from "@/data/adminData";
 import type { Drama } from "@/data/dramas";
@@ -35,11 +36,19 @@ const isStillAgent = (d: Drama) => {
 };
 
 const Movies = () => {
-  const [movies, setMovies] = useState<MovieItem[]>([]);
+  const [movies, setMovies] = useState<MovieItem[] | null>(null);
 
   useEffect(() => {
     return subscribeMovies(setMovies);
   }, []);
+
+  if (movies === null) {
+    return (
+      <div className="min-h-screen bg-background">
+        <LogoLoader text="Loading movies..." />
+      </div>
+    );
+  }
 
   const dramas = movies
     .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))

@@ -3,6 +3,7 @@ import HeroBanner from "@/components/HeroBanner";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
 import AppBanner from "@/components/AppBanner";
+import LogoLoader from "@/components/LogoLoader";
 
 import { subscribeMovies, subscribeSeries } from "@/lib/firebaseServices";
 import type { MovieItem, SeriesItem } from "@/data/adminData";
@@ -42,8 +43,8 @@ const toDrama = (item: MovieItem | SeriesItem, i: number): Drama => ({
 });
 
 const Index = () => {
-  const [fbMovies, setFbMovies] = useState<(MovieItem & { _idx: number })[]>([]);
-  const [fbSeries, setFbSeries] = useState<(SeriesItem & { _idx: number })[]>([]);
+  const [fbMovies, setFbMovies] = useState<(MovieItem & { _idx: number })[] | null>(null);
+  const [fbSeries, setFbSeries] = useState<(SeriesItem & { _idx: number })[] | null>(null);
 
   useEffect(() => {
     const unsub1 = subscribeMovies((movies) =>
@@ -55,7 +56,17 @@ const Index = () => {
     return () => { unsub1(); unsub2(); };
   }, []);
 
-  // Filter out agent content that is still within 5-day window
+  const loading = fbMovies === null || fbSeries === null;
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="relative w-full aspect-[16/7] bg-card animate-pulse" />
+        <LogoLoader text="Loading content..." />
+      </div>
+    );
+  }
+
   const isStillAgent = (d: Drama) => {
     if (!d.isAgent) return false;
     const markedAt = d.agentMarkedAt ? new Date(d.agentMarkedAt) : null;
@@ -68,7 +79,6 @@ const Index = () => {
     ...fbSeries.map(s => toDrama(s, s._idx)),
   ];
 
-  // Agent content shows as "Upcoming" on regular pages
   const displayAll = all.map(d => {
     if (isStillAgent(d)) {
       const markedAt = new Date(d.agentMarkedAt!);

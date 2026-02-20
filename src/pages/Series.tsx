@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
+import LogoLoader from "@/components/LogoLoader";
 import { subscribeSeries } from "@/lib/firebaseServices";
 import type { SeriesItem } from "@/data/adminData";
 import type { Drama } from "@/data/dramas";
@@ -25,11 +26,19 @@ const toDrama = (s: SeriesItem, i: number): Drama => ({
 });
 
 const Series = () => {
-  const [seriesList, setSeriesList] = useState<SeriesItem[]>([]);
+  const [seriesList, setSeriesList] = useState<SeriesItem[] | null>(null);
 
   useEffect(() => {
     return subscribeSeries(setSeriesList);
   }, []);
+
+  if (seriesList === null) {
+    return (
+      <div className="min-h-screen bg-background">
+        <LogoLoader text="Loading series..." />
+      </div>
+    );
+  }
 
   const dramas = seriesList
     .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0))
