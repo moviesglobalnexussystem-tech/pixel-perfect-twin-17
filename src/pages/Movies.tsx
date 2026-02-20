@@ -1,4 +1,5 @@
 import { useState, useEffect, useMemo } from "react";
+import { Film, TrendingUp, Clock, Flame, Heart, Sparkles, Crown, Star } from "lucide-react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
 import HeroBanner from "@/components/HeroBanner";
@@ -88,17 +89,17 @@ const Movies = () => {
     <div className="min-h-screen bg-background">
       <HeroBanner page="movies" compact />
       <GenreTags activeGenre={activeGenre} onGenreChange={setActiveGenre} />
-      {dramas.length > 0 && <ContentRow title="🎬 All Movies" dramas={dramas} />}
-      {popular.length > 0 && <ContentRow title="Popular Movies" dramas={popular} />}
-      {topTen.length > 0 && <ContentRow title="Top Rated" dramas={topTen} showRank />}
-      {comingSoon.length > 0 && <ContentRow title="Coming Soon & Upcoming" dramas={comingSoon} />}
-      {hotDrama.length > 0 && <ContentRow title="🔥 Hot" dramas={hotDrama} />}
-      {sweetRomance.length > 0 && <ContentRow title="Sweet Romance" dramas={sweetRomance} titleColor="hsl(30, 100%, 50%)" />}
-      {ancientCostume.length > 0 && <ContentRow title="Ancient Costume" dramas={ancientCostume} titleColor="hsl(30, 100%, 50%)" />}
-      {highQuality.length > 0 && <ContentRow title="High Quality" dramas={highQuality} />}
+      {dramas.length > 0 && <ContentRow title="All Movies" dramas={dramas} icon={Film} />}
+      {popular.length > 0 && <ContentRow title="Popular Movies" dramas={popular} icon={TrendingUp} />}
+      {topTen.length > 0 && <ContentRow title="Top Rated" dramas={topTen} icon={Star} showRank />}
+      {comingSoon.length > 0 && <ContentRow title="Coming Soon & Upcoming" dramas={comingSoon} icon={Clock} />}
+      {hotDrama.length > 0 && <ContentRow title="Hot" dramas={hotDrama} icon={Flame} />}
+      {sweetRomance.length > 0 && <ContentRow title="Sweet Romance" dramas={sweetRomance} titleColor="hsl(30, 100%, 50%)" icon={Heart} />}
+      {ancientCostume.length > 0 && <ContentRow title="Ancient Costume" dramas={ancientCostume} titleColor="hsl(30, 100%, 50%)" icon={Sparkles} />}
+      {highQuality.length > 0 && <ContentRow title="High Quality" dramas={highQuality} icon={Crown} />}
       {dramas.length === 0 && (
         <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-          <span className="text-4xl mb-4">🎬</span>
+          <Film className="w-10 h-10 mb-4" />
           <p className="text-sm font-medium">{activeGenre === "All Videos" ? "No movies uploaded yet" : `No movies found for "${activeGenre}"`}</p>
           <p className="text-xs mt-1">{activeGenre === "All Videos" ? "Check back soon or visit Admin to upload" : "Try a different genre filter"}</p>
         </div>

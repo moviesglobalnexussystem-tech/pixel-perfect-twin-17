@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
+import { Film, Tv, TrendingUp, Clock, Flame, Heart, Crown, Star, Sparkles, ListOrdered } from "lucide-react";
 import HeroBanner from "@/components/HeroBanner";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
-
 import LogoLoader from "@/components/LogoLoader";
 
 import { subscribeMovies, subscribeSeries } from "@/lib/firebaseServices";
@@ -123,22 +123,22 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       <HeroBanner />
       <div className="mt-6">
-        {onlyMovies.length > 0 && <ContentRow title="🔥 Movies" dramas={onlyMovies} />}
-        {onlySeries.length > 0 && <ContentRow title="📺 Series" dramas={onlySeries} />}
-        {popular.length > 0 && <ContentRow title="Popular on LUO FILM" dramas={popular} />}
-        {comingSoon.length > 0 && <ContentRow title="Coming Soon & Upcoming" dramas={comingSoon} />}
+        {onlyMovies.length > 0 && <ContentRow title="Movies" dramas={onlyMovies} icon={Film} />}
+        {onlySeries.length > 0 && <ContentRow title="Series" dramas={onlySeries} icon={Tv} />}
+        {popular.length > 0 && <ContentRow title="Popular on LUO FILM" dramas={popular} icon={TrendingUp} />}
+        {comingSoon.length > 0 && <ContentRow title="Coming Soon & Upcoming" dramas={comingSoon} icon={Clock} />}
         
         <GenreTags />
-        {topTen.length > 0 && <ContentRow title="Drama Selection" dramas={topTen} showRank />}
-        {dramaSelection.length > 0 && <ContentRow title="Editor's Selection" dramas={dramaSelection} showRank />}
-        {highQuality.length > 0 && <ContentRow title="High-quality Dramas" dramas={highQuality} />}
-        {hotDrama.length > 0 && <ContentRow title="🔥 Hot Dramas" dramas={hotDrama} />}
-        {sweetRomance.length > 0 && <ContentRow title="Sweet Romance" dramas={sweetRomance} titleColor="hsl(30, 100%, 50%)" />}
+        {topTen.length > 0 && <ContentRow title="Drama Selection" dramas={topTen} icon={ListOrdered} showRank />}
+        {dramaSelection.length > 0 && <ContentRow title="Editor's Selection" dramas={dramaSelection} icon={Star} showRank />}
+        {highQuality.length > 0 && <ContentRow title="High-quality Dramas" dramas={highQuality} icon={Crown} />}
+        {hotDrama.length > 0 && <ContentRow title="Hot Dramas" dramas={hotDrama} icon={Flame} />}
+        {sweetRomance.length > 0 && <ContentRow title="Sweet Romance" dramas={sweetRomance} titleColor="hsl(30, 100%, 50%)" icon={Heart} />}
         
-        {ancientCostume.length > 0 && <ContentRow title="Ancient Costume" dramas={ancientCostume} titleColor="hsl(30, 100%, 50%)" />}
+        {ancientCostume.length > 0 && <ContentRow title="Ancient Costume" dramas={ancientCostume} titleColor="hsl(30, 100%, 50%)" icon={Sparkles} />}
         {displayAll.length === 0 && (
           <div className="flex flex-col items-center justify-center py-24 text-muted-foreground">
-            <span className="text-4xl mb-4">🎬</span>
+            <Film className="w-10 h-10 mb-4" />
             <p className="text-sm font-medium">No content yet</p>
             <p className="text-xs mt-1">Admin can upload movies and series from the dashboard</p>
           </div>
