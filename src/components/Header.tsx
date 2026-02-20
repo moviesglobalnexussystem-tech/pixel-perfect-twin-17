@@ -6,6 +6,7 @@ import LoginModal from "./LoginModal";
 import SubscribeModal from "./SubscribeModal";
 import AgentAccessModal from "./AgentAccessModal";
 import { useAuth } from "@/contexts/AuthContext";
+import { usePWAInstall } from "@/hooks/usePWAInstall";
 
 const ADMIN_EMAIL = "mainplatform.nexus@gmail.com";
 
@@ -30,6 +31,7 @@ const Header = () => {
   const [subscribeMode, setSubscribeMode] = useState<"user" | "agent">("user");
   const [showAgentAccess, setShowAgentAccess] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const { canInstall, install } = usePWAInstall();
 
   const handleLogout = async () => {
     await logout();
@@ -79,9 +81,14 @@ const Header = () => {
           </nav>
 
           <div className="flex items-center gap-2 shrink-0">
-            <button className="hidden sm:flex items-center gap-1.5 bg-primary/10 text-primary text-[10px] font-semibold px-3 py-1.5 rounded-full hover:bg-primary/20 transition-colors">
-              <Download className="w-3 h-3" />App
-            </button>
+            {canInstall && (
+              <button
+                onClick={install}
+                className="hidden sm:flex items-center gap-1.5 bg-gradient-to-r from-primary to-primary/80 text-primary-foreground text-[10px] font-bold px-4 py-1.5 rounded-full shadow-[0_2px_10px_hsl(135_100%_37%/0.3)] hover:shadow-[0_2px_16px_hsl(135_100%_37%/0.5)] transition-all active:scale-95"
+              >
+                <Download className="w-3 h-3" />Install
+              </button>
+            )}
 
             {user ? (
               <div className="relative group">
