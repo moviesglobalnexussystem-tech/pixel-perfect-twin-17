@@ -104,8 +104,12 @@ const LoginModal = ({ open, onClose }: LoginModalProps) => {
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
-      await loginWithGoogle();
-      toast({ title: "Welcome!", description: "Logged in with Google." });
+      const result = await loginWithGoogle();
+      if (result.isNewUser) {
+        toast({ title: "Welcome!", description: "Please complete your profile." });
+      } else {
+        toast({ title: "Welcome back!", description: "Logged in with Google." });
+      }
       handleClose();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
