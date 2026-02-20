@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { subscribeTVChannels, subscribeLatestUpdates } from "@/lib/firebaseServices";
 import type { TVChannelItem, LatestUpdateItem } from "@/data/adminData";
 import ShakaPlayerComponent from "@/components/ShakaPlayerComponent";
+import logo from "@/assets/logo.png";
 
 const TVChannel = () => {
   const [channels, setChannels] = useState<TVChannelItem[]>([]);
@@ -16,20 +17,26 @@ const TVChannel = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-4 md:px-8 py-6">
-        <h1 className="text-foreground text-xl font-bold mb-1">TV Channels</h1>
-        <p className="text-muted-foreground text-xs mb-4">Watch live TV channels 24/7</p>
-      </div>
+      <div className="h-3" />
 
       {activeChannel && activeChannel.streamLink && (
         <div className="px-4 md:px-8 mb-6">
-          <div className="relative w-full bg-black rounded-xl overflow-hidden" style={{ aspectRatio: "16/9", maxHeight: "480px" }}>
+          <div className="relative w-full bg-black rounded-2xl overflow-hidden border border-border shadow-2xl shadow-black/50" style={{ aspectRatio: "16/9", maxHeight: "520px" }}>
             <ShakaPlayerComponent key={activeChannel.streamLink} src={activeChannel.streamLink} autoplay />
+            {/* Watermark logo */}
+            <div className="absolute top-3 right-3 z-20 pointer-events-none opacity-60">
+              <img src={logo} alt="LUO FILM" className="w-8 h-8 rounded-md object-contain drop-shadow-lg" />
+            </div>
+            {/* Top gradient overlay for watermark visibility */}
+            <div className="absolute inset-x-0 top-0 h-16 bg-gradient-to-b from-black/40 to-transparent pointer-events-none z-10" />
           </div>
-          <div className="mt-2 flex items-center gap-2">
-            <span className="text-foreground text-sm font-bold">{activeChannel.name}</span>
-            <span className="text-muted-foreground text-xs">{activeChannel.category}</span>
-            <button onClick={() => setActiveChannel(null)} className="ml-auto text-destructive text-xs hover:underline">Close Player</button>
+          <div className="mt-3 flex items-center gap-3 px-1">
+            <div className="flex items-center gap-2">
+              <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
+              <span className="text-foreground text-sm font-bold">{activeChannel.name}</span>
+            </div>
+            <span className="text-muted-foreground text-xs bg-secondary px-2 py-0.5 rounded-full">{activeChannel.category}</span>
+            <button onClick={() => setActiveChannel(null)} className="ml-auto text-muted-foreground hover:text-destructive text-xs font-medium transition-colors">✕ Close</button>
           </div>
         </div>
       )}
