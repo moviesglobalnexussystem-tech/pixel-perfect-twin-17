@@ -412,14 +412,14 @@ const Watch = () => {
           </div>
 
           {/* Action bar */}
-          <div className="flex items-center gap-2 px-4 py-3">
-            <button onClick={handleShare} className="flex-1 flex flex-col items-center gap-1 bg-card border border-border rounded-xl py-2.5 hover:bg-secondary transition-colors">
-              <Share2 className="w-4 h-4 text-primary" />
-              <span className="text-[10px] font-medium text-foreground">Share</span>
+          <div className="flex items-center gap-1.5 px-4 py-2">
+            <button onClick={handleShare} className="flex-1 flex flex-col items-center gap-0.5 bg-card border border-border rounded-lg py-1.5 hover:bg-secondary transition-colors">
+              <Share2 className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[9px] font-medium text-muted-foreground">Share</span>
             </button>
-            <button onClick={() => setShowComments(!showComments)} className="flex-1 flex flex-col items-center gap-1 bg-card border border-border rounded-xl py-2.5 hover:bg-secondary transition-colors">
-              <MessageSquare className="w-4 h-4 text-primary" />
-              <span className="text-[10px] font-medium text-foreground">Comments ({comments.length})</span>
+            <button onClick={() => setShowComments(!showComments)} className="flex-1 flex flex-col items-center gap-0.5 bg-card border border-border rounded-lg py-1.5 hover:bg-secondary transition-colors">
+              <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-[9px] font-medium text-muted-foreground">{comments.length} Comments</span>
             </button>
             <button onClick={() => {
               if (!user) {
@@ -427,9 +427,9 @@ const Watch = () => {
                 return;
               }
               handleDownload();
-            }} className="flex-1 flex flex-col items-center gap-1 bg-card border border-border rounded-xl py-2.5 hover:bg-secondary transition-colors">
-              <Download className="w-4 h-4 text-primary" />
-              <span className="text-[10px] font-medium text-foreground">Download</span>
+            }} className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95">
+              <Download className="w-3.5 h-3.5 text-primary-foreground" />
+              <span className="text-[9px] font-bold text-primary-foreground">Download</span>
             </button>
           </div>
 
