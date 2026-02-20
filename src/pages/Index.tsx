@@ -106,7 +106,11 @@ const Index = () => {
   const dramaSelection = displayAll.filter(d => {
     const item = fbMovies.find(m => m.id === d.firebaseId) || fbSeries.find(s => s.id === d.firebaseId);
     return item?.categories?.includes("Drama Selection");
-  });
+  }).sort((a, b) => {
+    const itemA = fbSeries.find(s => s.id === a.firebaseId);
+    const itemB = fbSeries.find(s => s.id === b.firebaseId);
+    return ((itemA as any)?.dramaSelectionPosition || 999) - ((itemB as any)?.dramaSelectionPosition || 999);
+  }).map((d, i) => ({ ...d, rank: i + 1 }));
   const hotDrama = displayAll.filter(d => {
     const item = fbMovies.find(m => m.id === d.firebaseId) || fbSeries.find(s => s.id === d.firebaseId);
     return item?.isHotDrama;
