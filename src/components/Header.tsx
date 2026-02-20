@@ -1,10 +1,11 @@
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { Download, User, Home, Film, Tv, Radio, Trophy, Crown, ShieldCheck, Menu, X, Settings, LogOut, HelpCircle } from "lucide-react";
+import { Download, User, Home, Film, Tv, Radio, Trophy, Crown, ShieldCheck, Menu, X, Settings, LogOut, HelpCircle, Search } from "lucide-react";
 import logo from "@/assets/logo.png";
 import LoginModal from "./LoginModal";
 import SubscribeModal from "./SubscribeModal";
 import AgentAccessModal from "./AgentAccessModal";
+import GlobalSearch from "./GlobalSearch";
 import { useAuth } from "@/contexts/AuthContext";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 
@@ -80,7 +81,8 @@ const Header = () => {
             })}
           </nav>
 
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex items-center gap-1.5 shrink-0">
+            <GlobalSearch />
             <button
               onClick={() => navigate("/how-to-use")}
               className="flex items-center gap-1.5 bg-secondary text-foreground text-[10px] font-medium px-3 py-1.5 rounded-full border border-border hover:bg-secondary/80 transition-all active:scale-95"
