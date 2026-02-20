@@ -58,7 +58,7 @@ const ContentRow = ({ title, dramas, showRank, titleColor }: ContentRowProps) =>
         onClick={handleSectionClick}
       >
         <h2
-          className="text-sm md:text-base font-bold"
+          className="text-[11px] md:text-xs font-semibold tracking-tight"
           style={{ color: titleColor || "hsl(var(--foreground))" }}
         >
           {title}

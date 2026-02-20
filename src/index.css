@@ -47,7 +47,7 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
-    font-family: 'Inter', sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', sans-serif;
     scrollbar-width: thin;
     scrollbar-color: hsl(135 100% 37% / 0.4) hsl(0 0% 8%);
   }
