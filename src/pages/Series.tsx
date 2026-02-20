@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import ContentRow from "@/components/ContentRow";
 import GenreTags from "@/components/GenreTags";
+import HeroBanner from "@/components/HeroBanner";
 import LogoLoader from "@/components/LogoLoader";
 import { subscribeSeries } from "@/lib/firebaseServices";
 import type { SeriesItem } from "@/data/adminData";
@@ -54,10 +55,7 @@ const Series = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      <div className="px-4 md:px-8 py-6">
-        <h1 className="text-foreground text-xl font-bold mb-1">Series</h1>
-        <p className="text-muted-foreground text-xs mb-4">Binge-worthy drama series updated daily</p>
-      </div>
+      <HeroBanner page="series" compact />
       <GenreTags />
       {dramas.length > 0 && <ContentRow title="📺 All Series" dramas={dramas} />}
       {popular.length > 0 && <ContentRow title="Popular Series" dramas={popular} />}
