@@ -6,6 +6,8 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "./contexts/AuthContext";
 import Header from "./components/Header";
 import BottomNav from "./components/BottomNav";
+import ActivityTrackerProvider from "./components/ActivityTrackerProvider";
+import GooglePhoneModal from "./components/GooglePhoneModal";
 import Index from "./pages/Index";
 import Watch from "./pages/Watch";
 import Movies from "./pages/Movies";
@@ -27,6 +29,8 @@ const App = () => (
       <Sonner />
       <AuthProvider>
         <BrowserRouter>
+          <ActivityTrackerProvider />
+          <GooglePhonePrompt />
           <Header />
           <Routes>
             <Route path="/" element={<Index />} />
@@ -47,5 +51,13 @@ const App = () => (
     </TooltipProvider>
   </QueryClientProvider>
 );
+
+// Wrapper to show Google phone prompt
+import { useAuth } from "./contexts/AuthContext";
+
+const GooglePhonePrompt = () => {
+  const { needsPhoneSetup, setNeedsPhoneSetup } = useAuth();
+  return <GooglePhoneModal open={needsPhoneSetup} onClose={() => setNeedsPhoneSetup(false)} />;
+};
 
 export default App;
