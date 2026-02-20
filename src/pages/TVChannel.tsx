@@ -32,21 +32,35 @@ const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
     if (!shaka.Player.isBrowserSupported()) return;
 
     const video = videoRef.current;
-    const player = new shaka.Player();
+    // Pass video directly to constructor — skips async attach step
+    const player = new shaka.Player(video);
     playerRef.current = player;
 
     player.configure({
       streaming: {
-        bufferingGoal: 6,
-        rebufferingGoal: 2,
+        bufferingGoal: 2,
+        rebufferingGoal: 0.5,
         bufferBehind: 10,
-        retryParameters: { maxAttempts: 4, baseDelay: 500, backoffFactor: 1.5, fuzzFactor: 0.5 },
+        segmentPrefetchLimit: 2,
+        retryParameters: { maxAttempts: 3, baseDelay: 200, backoffFactor: 1.5, fuzzFactor: 0.3 },
+      },
+      manifest: {
+        retryParameters: { maxAttempts: 3, baseDelay: 200, backoffFactor: 1.5, fuzzFactor: 0.3 },
+        dash: {
+          ignoreMinBufferTime: true,
+        },
       },
     });
 
-    player.attach(video).then(() => player.load(src)).then(() => {
+    // Muted autoplay is always allowed by browsers
+    video.muted = true;
+
+    player.load(src).then(() => {
       setLoading(false);
-      video.play().catch(() => {});
+      video.play().then(() => {
+        // Unmute after playback starts
+        setTimeout(() => { video.muted = false; setMuted(false); }, 300);
+      }).catch(() => {});
     }).catch((err: any) => {
       console.error("Player error:", err);
       setLoading(false);
