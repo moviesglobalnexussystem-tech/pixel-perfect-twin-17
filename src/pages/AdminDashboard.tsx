@@ -3,8 +3,10 @@ import {
   LayoutDashboard, Film, Tv, PlayCircle, Image, Radio, Activity,
   Users, ShieldCheck, Wallet, ChevronLeft, ChevronRight, Plus, Pencil,
   Trash2, Ban, CheckCircle, Eye, Search, Download, X, Star, Clock,
-  ArrowUpDown, AlertTriangle, RefreshCw, Newspaper
+  ArrowUpDown, AlertTriangle, RefreshCw, Newspaper, ListOrdered, Trophy
 } from "lucide-react";
+import SelectionManager from "@/components/admin/SelectionManager";
+import RankManager from "@/components/admin/RankManager";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -29,13 +31,15 @@ import {
   deleteTransaction,
 } from "@/lib/firebaseServices";
 
-type Section = "overview" | "series" | "movies" | "episodes" | "carousel" | "tv-channels" | "latest-updates" | "activity" | "agents" | "users" | "wallet";
+type Section = "overview" | "series" | "movies" | "episodes" | "carousel" | "tv-channels" | "latest-updates" | "activity" | "agents" | "users" | "wallet" | "selection" | "ranking";
 
 const sidebarItems: { key: Section; label: string; icon: any }[] = [
   { key: "overview", label: "Overview", icon: LayoutDashboard },
   { key: "series", label: "Series", icon: Tv },
   { key: "movies", label: "Movies", icon: Film },
   { key: "episodes", label: "Episodes", icon: PlayCircle },
+  { key: "selection", label: "Selection", icon: ListOrdered },
+  { key: "ranking", label: "Ranking", icon: Trophy },
   { key: "carousel", label: "Carousel", icon: Image },
   { key: "tv-channels", label: "TV Channels", icon: Radio },
   { key: "latest-updates", label: "Latest Updates", icon: Newspaper },
@@ -176,6 +180,8 @@ const AdminDashboard = () => {
         {section === "series" && <SeriesSection series={series} search={search} />}
         {section === "movies" && <MoviesSection movies={movies} search={search} />}
         {section === "episodes" && <EpisodesSection episodes={episodes} series={series} search={search} />}
+        {section === "selection" && <SelectionManager series={series} movies={movies} />}
+        {section === "ranking" && <RankManager series={series} movies={movies} />}
         {section === "carousel" && <CarouselSection carousels={carousels} series={series} movies={movies} episodes={episodes} tvChannels={tvChannels} latestUpdates={latestUpdates} search={search} />}
         {section === "tv-channels" && <TVChannelSection channels={tvChannels} search={search} />}
         {section === "latest-updates" && <LatestUpdatesSection updates={latestUpdates} search={search} />}

@@ -1,7 +1,30 @@
 import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useRef } from "react";
+import { useNavigate } from "react-router-dom";
 import type { Drama } from "@/data/dramas";
 import DramaCard from "./DramaCard";
+
+// Map section titles to section page IDs
+const TITLE_TO_SECTION: Record<string, string> = {
+  "🔥 Movies": "movies",
+  "📺 Series": "series",
+  "📺 All Series": "series",
+  "🎬 All Movies": "movies",
+  "Popular on LUO FILM": "popular",
+  "Popular Series": "popular-series",
+  "Popular Movies": "popular-movies",
+  "Coming Soon & Upcoming": "coming-soon",
+  "Coming Soon": "coming-soon",
+  "Top Rated": "top-rated",
+  "Drama Selection": "drama-selection",
+  "Editor's Selection": "editors-selection",
+  "High-quality Dramas": "high-quality",
+  "High Quality": "high-quality",
+  "🔥 Hot Dramas": "hot-dramas",
+  "🔥 Hot": "hot-movies",
+  "Sweet Romance": "sweet-romance",
+  "Ancient Costume": "ancient-costume",
+};
 
 interface ContentRowProps {
   title: string;
@@ -12,6 +35,8 @@ interface ContentRowProps {
 
 const ContentRow = ({ title, dramas, showRank, titleColor }: ContentRowProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const sectionId = TITLE_TO_SECTION[title];
 
   const scroll = (dir: "left" | "right") => {
     if (scrollRef.current) {
@@ -20,16 +45,25 @@ const ContentRow = ({ title, dramas, showRank, titleColor }: ContentRowProps) =>
     }
   };
 
+  const handleSectionClick = () => {
+    if (sectionId) {
+      navigate(`/section/${sectionId}`);
+    }
+  };
+
   return (
     <section className="px-4 md:px-10 mb-6">
-      <div className="flex items-center gap-2 mb-3">
+      <div
+        className={`flex items-center gap-2 mb-3 ${sectionId ? "cursor-pointer group/title" : ""}`}
+        onClick={handleSectionClick}
+      >
         <h2
           className="text-sm md:text-base font-bold"
           style={{ color: titleColor || "hsl(var(--foreground))" }}
         >
           {title}
         </h2>
-        <ChevronRight className="w-4 h-4 text-muted-foreground" />
+        <ChevronRight className={`w-4 h-4 text-muted-foreground ${sectionId ? "group-hover/title:text-primary transition-colors" : ""}`} />
       </div>
 
       <div className="relative group/row">
