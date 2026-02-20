@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { subscribeTVChannels, subscribeLatestUpdates } from "@/lib/firebaseServices";
 import type { TVChannelItem, LatestUpdateItem } from "@/data/adminData";
-import Artplayer from "artplayer";
-import Hls from "hls.js";
+import shaka from "shaka-player";
 import logo from "@/assets/logo.png";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Loader2 } from "lucide-react";
 
 interface TVPlayerProps {
   src: string;
@@ -13,87 +13,200 @@ interface TVPlayerProps {
 }
 
 const TVPlayer = ({ src, name, category, onClose }: TVPlayerProps) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const artRef = useRef<Artplayer | null>(null);
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const playerRef = useRef<shaka.Player | null>(null);
+  const wrapperRef = useRef<HTMLDivElement>(null);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const [playing, setPlaying] = useState(false);
+  const [muted, setMuted] = useState(false);
+  const [volume, setVolume] = useState(1);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [showControls, setShowControls] = useState(true);
+
+  // Initialize Shaka Player
   useEffect(() => {
-    if (!containerRef.current || !src) return;
+    if (!videoRef.current || !src) return;
+    shaka.polyfill.installAll();
+    if (!shaka.Player.isBrowserSupported()) return;
 
-    const isHLS = src.includes(".m3u8");
+    const video = videoRef.current;
+    const player = new shaka.Player();
+    playerRef.current = player;
 
-    const art = new Artplayer({
-      container: containerRef.current,
-      url: src,
-      autoplay: true,
-      theme: "hsl(135, 100%, 37%)",
-      fullscreen: true,
-      fullscreenWeb: true,
-      pip: true,
-      setting: true,
-      playbackRate: true,
-      aspectRatio: true,
-      miniProgressBar: true,
-      mutex: true,
-      backdrop: true,
-      hotkey: true,
-      fastForward: true,
-      lock: true,
-      isLive: isHLS,
-      layers: [
-        {
-          name: "watermark",
-          html: `<img src="${logo}" style="width:32px;height:32px;border-radius:6px;opacity:0.6;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.5));" />`,
-          tooltip: "LUO FILM",
-          style: {
-            position: "absolute",
-            top: "12px",
-            right: "12px",
-            zIndex: "50",
-            pointerEvents: "none",
-          },
-        },
-      ],
-      ...(isHLS && Hls.isSupported()
-        ? {
-            customType: {
-              m3u8: (video: HTMLVideoElement, url: string) => {
-                const hls = new Hls({
-                  enableWorker: true,
-                  lowLatencyMode: true,
-                  maxBufferLength: 10,
-                  maxMaxBufferLength: 20,
-                  startFragPrefetch: true,
-                  testBandwidth: true,
-                });
-                hls.loadSource(url);
-                hls.attachMedia(video);
-                hls.on(Hls.Events.MANIFEST_PARSED, () => {
-                  video.play().catch(() => {});
-                });
-                art.on("destroy", () => hls.destroy());
-              },
-            },
-          }
-        : {}),
+    player.configure({
+      streaming: {
+        bufferingGoal: 6,
+        rebufferingGoal: 2,
+        bufferBehind: 10,
+        retryParameters: { maxAttempts: 4, baseDelay: 500, backoffFactor: 1.5, fuzzFactor: 0.5 },
+      },
     });
 
-    artRef.current = art;
+    player.attach(video).then(() => player.load(src)).then(() => {
+      setLoading(false);
+      video.play().catch(() => {});
+    }).catch((err: any) => {
+      console.error("Player error:", err);
+      setLoading(false);
+    });
 
     return () => {
-      if (artRef.current) {
-        artRef.current.destroy(false);
-        artRef.current = null;
+      if (playerRef.current) {
+        playerRef.current.destroy();
+        playerRef.current = null;
       }
     };
   }, [src]);
 
+  // Sync play state
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const onPlay = () => setPlaying(true);
+    const onPause = () => setPlaying(false);
+    const onWaiting = () => setLoading(true);
+    const onPlaying = () => setLoading(false);
+    video.addEventListener("play", onPlay);
+    video.addEventListener("pause", onPause);
+    video.addEventListener("waiting", onWaiting);
+    video.addEventListener("playing", onPlaying);
+    return () => {
+      video.removeEventListener("play", onPlay);
+      video.removeEventListener("pause", onPause);
+      video.removeEventListener("waiting", onWaiting);
+      video.removeEventListener("playing", onPlaying);
+    };
+  }, []);
+
+  const togglePlay = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.paused ? v.play().catch(() => {}) : v.pause();
+  };
+
+  const toggleMute = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.muted = !v.muted;
+    setMuted(v.muted);
+  };
+
+  const changeVolume = (val: number) => {
+    const v = videoRef.current;
+    if (!v) return;
+    v.volume = val;
+    setVolume(val);
+    if (val === 0) { v.muted = true; setMuted(true); }
+    else if (v.muted) { v.muted = false; setMuted(false); }
+  };
+
+  const toggleFullscreen = useCallback(() => {
+    const el = wrapperRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) {
+      el.requestFullscreen().then(() => setIsFullscreen(true)).catch(() => {});
+    } else {
+      document.exitFullscreen().then(() => setIsFullscreen(false)).catch(() => {});
+    }
+  }, []);
+
+  useEffect(() => {
+    const onChange = () => setIsFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  // Auto-hide controls
+  const resetHideTimer = useCallback(() => {
+    setShowControls(true);
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+  }, []);
+
+  useEffect(() => {
+    resetHideTimer();
+    return () => { if (hideTimerRef.current) clearTimeout(hideTimerRef.current); };
+  }, [resetHideTimer]);
+
   return (
     <div className="px-4 md:px-8 mb-6">
       <div
-        ref={containerRef}
-        className="w-full rounded-2xl overflow-hidden border border-border shadow-2xl shadow-black/50"
-        style={{ aspectRatio: "16/9", maxHeight: "520px" }}
-      />
+        ref={wrapperRef}
+        className="relative w-full bg-black rounded-2xl overflow-hidden border border-border shadow-2xl shadow-black/50 group select-none"
+        style={{ aspectRatio: "16/9", maxHeight: isFullscreen ? "100vh" : "520px" }}
+        onMouseMove={resetHideTimer}
+        onTouchStart={resetHideTimer}
+      >
+        <video
+          ref={videoRef}
+          className="w-full h-full object-contain bg-black"
+          playsInline
+          autoPlay
+          onClick={togglePlay}
+        />
+
+        {/* Watermark */}
+        <div className="absolute top-3 right-3 z-30 pointer-events-none opacity-50">
+          <img src={logo} alt="LUO FILM" className="w-8 h-8 rounded-md object-contain drop-shadow-lg" />
+        </div>
+
+        {/* Loading spinner */}
+        {loading && (
+          <div className="absolute inset-0 flex items-center justify-center z-20 bg-black/30">
+            <Loader2 className="w-10 h-10 text-primary animate-spin" />
+          </div>
+        )}
+
+        {/* LIVE badge */}
+        <div className="absolute top-3 left-3 z-30">
+          <span className="flex items-center gap-1.5 bg-destructive/90 text-destructive-foreground text-[10px] font-bold px-2.5 py-1 rounded-md backdrop-blur-sm">
+            <span className="w-1.5 h-1.5 bg-white rounded-full animate-pulse" />
+            LIVE
+          </span>
+        </div>
+
+        {/* Custom controls overlay */}
+        <div className={`absolute inset-x-0 bottom-0 z-20 transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
+          <div className="bg-gradient-to-t from-black/90 via-black/50 to-transparent pt-12 pb-3 px-4">
+            {/* Channel info + controls */}
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3 min-w-0">
+                {/* Play/Pause */}
+                <button onClick={togglePlay} className="w-9 h-9 flex items-center justify-center rounded-full bg-white/15 hover:bg-white/25 backdrop-blur-sm transition-colors">
+                  {playing ? <Pause className="w-4 h-4 text-white" /> : <Play className="w-4 h-4 text-white ml-0.5" />}
+                </button>
+
+                {/* Volume */}
+                <div className="flex items-center gap-1.5 group/vol">
+                  <button onClick={toggleMute} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
+                    {muted || volume === 0 ? <VolumeX className="w-4 h-4 text-white/80" /> : <Volume2 className="w-4 h-4 text-white/80" />}
+                  </button>
+                  <input
+                    type="range" min="0" max="1" step="0.05"
+                    value={muted ? 0 : volume}
+                    onChange={(e) => changeVolume(parseFloat(e.target.value))}
+                    className="w-0 group-hover/vol:w-16 transition-all duration-200 accent-primary h-1 cursor-pointer opacity-0 group-hover/vol:opacity-100"
+                  />
+                </div>
+
+                {/* Channel name */}
+                <span className="text-white/90 text-xs font-semibold truncate">{name}</span>
+                <span className="text-white/50 text-[10px] bg-white/10 px-2 py-0.5 rounded-full shrink-0">{category}</span>
+              </div>
+
+              <div className="flex items-center gap-2 shrink-0">
+                {/* Fullscreen */}
+                <button onClick={toggleFullscreen} className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors">
+                  {isFullscreen ? <Minimize className="w-4 h-4 text-white/80" /> : <Maximize className="w-4 h-4 text-white/80" />}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="mt-3 flex items-center gap-3 px-1">
         <div className="flex items-center gap-2">
           <span className="w-2 h-2 bg-destructive rounded-full animate-pulse" />
