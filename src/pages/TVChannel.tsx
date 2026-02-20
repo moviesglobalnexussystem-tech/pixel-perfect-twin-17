@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from "react";
+import { Newspaper } from "lucide-react";
 import { subscribeTVChannels, subscribeLatestUpdates } from "@/lib/firebaseServices";
 import type { TVChannelItem, LatestUpdateItem } from "@/data/adminData";
 import shaka from "shaka-player";
@@ -313,7 +314,7 @@ const TVChannel = () => {
       {/* Latest Updates Section */}
       {latestUpdates.length > 0 && (
         <div className="px-4 md:px-8 mb-8">
-          <h2 className="text-foreground text-lg font-bold mb-4">📰 Latest Updates</h2>
+          <h2 className="text-foreground text-xs font-semibold tracking-tight mb-4 flex items-center gap-1.5"><Newspaper className="w-3.5 h-3.5 text-primary" /> Latest Updates</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {latestUpdates.map((update) => (
               <a key={update.id} href={update.linkUrl || "#"} target={update.linkUrl ? "_blank" : undefined} rel="noopener noreferrer"

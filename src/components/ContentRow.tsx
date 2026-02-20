@@ -2,14 +2,14 @@ import { ChevronRight, ChevronLeft } from "lucide-react";
 import { useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import type { Drama } from "@/data/dramas";
+import type { LucideIcon } from "lucide-react";
 import DramaCard from "./DramaCard";
 
-// Map section titles to section page IDs
 const TITLE_TO_SECTION: Record<string, string> = {
-  "🔥 Movies": "movies",
-  "📺 Series": "series",
-  "📺 All Series": "series",
-  "🎬 All Movies": "movies",
+  "Movies": "movies",
+  "Series": "series",
+  "All Series": "series",
+  "All Movies": "movies",
   "Popular on LUO FILM": "popular",
   "Popular Series": "popular-series",
   "Popular Movies": "popular-movies",
@@ -20,8 +20,8 @@ const TITLE_TO_SECTION: Record<string, string> = {
   "Editor's Selection": "editors-selection",
   "High-quality Dramas": "high-quality",
   "High Quality": "high-quality",
-  "🔥 Hot Dramas": "hot-dramas",
-  "🔥 Hot": "hot-movies",
+  "Hot Dramas": "hot-dramas",
+  "Hot": "hot-movies",
   "Sweet Romance": "sweet-romance",
   "Ancient Costume": "ancient-costume",
 };
@@ -31,9 +31,10 @@ interface ContentRowProps {
   dramas: Drama[];
   showRank?: boolean;
   titleColor?: string;
+  icon?: LucideIcon;
 }
 
-const ContentRow = ({ title, dramas, showRank, titleColor }: ContentRowProps) => {
+const ContentRow = ({ title, dramas, showRank, titleColor, icon: Icon }: ContentRowProps) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const sectionId = TITLE_TO_SECTION[title];
@@ -54,16 +55,17 @@ const ContentRow = ({ title, dramas, showRank, titleColor }: ContentRowProps) =>
   return (
     <section className="px-4 md:px-10 mb-6">
       <div
-        className={`flex items-center gap-2 mb-3 ${sectionId ? "cursor-pointer group/title" : ""}`}
+        className={`flex items-center gap-1.5 mb-3 ${sectionId ? "cursor-pointer group/title" : ""}`}
         onClick={handleSectionClick}
       >
+        {Icon && <Icon className="w-3 h-3 md:w-3.5 md:h-3.5" style={{ color: titleColor || "hsl(var(--primary))" }} />}
         <h2
           className="text-[11px] md:text-xs font-semibold tracking-tight"
           style={{ color: titleColor || "hsl(var(--foreground))" }}
         >
           {title}
         </h2>
-        <ChevronRight className={`w-4 h-4 text-muted-foreground ${sectionId ? "group-hover/title:text-primary transition-colors" : ""}`} />
+        <ChevronRight className={`w-3 h-3 text-muted-foreground ${sectionId ? "group-hover/title:text-primary transition-colors" : ""}`} />
       </div>
 
       <div className="relative group/row">
