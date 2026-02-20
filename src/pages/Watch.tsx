@@ -7,6 +7,7 @@ import type { EpisodeItem, CommentItem, WatchLaterItem } from "@/data/adminData"
 import SportPlayer from "@/components/SportPlayer";
 import ArtPlayerComponent from "@/components/ArtPlayerComponent";
 import { useState, useEffect } from "react";
+import LogoLoader from "@/components/LogoLoader";
 import type { Drama } from "@/data/dramas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
@@ -137,6 +138,8 @@ const Watch = () => {
   const [watchLaterItems, setWatchLaterItems] = useState<WatchLaterItem[]>([]);
   const [showSubscribe, setShowSubscribe] = useState(false);
   const [subscribeMode, setSubscribeMode] = useState<"user" | "agent">("user");
+  const [isDownloading, setIsDownloading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const isSport = id?.startsWith("sport-");
 
   const firebaseState = location.state as {
@@ -162,8 +165,8 @@ const Watch = () => {
     if (isSport || !id) return;
 
     const loadContent = async () => {
+      setIsLoading(true);
       if (firebaseState?.firebaseId) {
-        // We have state from navigation
         setDrama({
           id: Number(id) || 9999,
           title: firebaseState.title || "Unknown",
@@ -183,9 +186,7 @@ const Watch = () => {
           downloadLink: firebaseState.downloadLink,
         });
       } else {
-        // No state - fetch directly from Firestore by document ID
         try {
-          // Try series first
           const seriesDoc = await getDoc(doc(db, "series", id));
           if (seriesDoc.exists()) {
             const s = seriesDoc.data();
@@ -196,7 +197,6 @@ const Watch = () => {
               isHotDrama: s.isHotDrama, isOriginal: s.isOriginal, firebaseId: id,
             });
           } else {
-            // Try movies
             const movieDoc = await getDoc(doc(db, "movies", id));
             if (movieDoc.exists()) {
               const m = movieDoc.data();
@@ -213,6 +213,7 @@ const Watch = () => {
           console.error("Error loading content:", err);
         }
       }
+      setIsLoading(false);
     };
 
     loadContent();
@@ -260,8 +261,8 @@ const Watch = () => {
 
   if (isSport) return <SportWatch />;
 
-  if (!drama && firebaseState?.firebaseId) {
-    return <div className="min-h-screen bg-background flex items-center justify-center text-muted-foreground text-sm">Loading...</div>;
+  if (isLoading || (!drama && firebaseState?.firebaseId)) {
+    return <div className="min-h-screen bg-background flex items-center justify-center"><LogoLoader text="Loading content..." /></div>;
   }
 
   if (!drama) {
@@ -346,17 +347,34 @@ const Watch = () => {
     }
   };
 
-  const handleDownload = () => {
+  const handleDownload = async () => {
     const downloadUrl = currentEpisode?.downloadLink || currentEpisode?.streamLink || (drama as any).downloadLink || drama.streamLink;
-    if (downloadUrl) {
-      const a = document.createElement("a");
-      a.href = downloadUrl;
-      a.target = "_blank";
-      a.download = `${drama.title}.mp4`;
-      a.click();
-    } else {
+    if (!downloadUrl) {
       toast({ title: "No download available", variant: "destructive" });
+      return;
     }
+    setIsDownloading(true);
+    toast({ title: "Preparing download...", description: "Please wait while the video is being fetched." });
+    try {
+      const response = await fetch(downloadUrl);
+      if (!response.ok) throw new Error(`Download failed (${response.status})`);
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const fileName = currentEpisode
+        ? `${drama.title} - Episode ${currentEpisode.episodeNumber}.mp4`
+        : `${drama.title}.mp4`;
+      a.download = fileName;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      toast({ title: "Download started!", description: fileName });
+    } catch (err: any) {
+      toast({ title: "Download failed", description: err.message, variant: "destructive" });
+    }
+    setIsDownloading(false);
   };
 
   const handleWatchOnTV = () => {
@@ -427,9 +445,9 @@ const Watch = () => {
                 return;
               }
               handleDownload();
-            }} className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95">
-              <Download className="w-3.5 h-3.5 text-primary-foreground" />
-              <span className="text-[9px] font-bold text-primary-foreground">Download</span>
+            }} disabled={isDownloading} className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95 disabled:opacity-50">
+              <Download className={`w-3.5 h-3.5 text-primary-foreground ${isDownloading ? "animate-pulse" : ""}`} />
+              <span className="text-[9px] font-bold text-primary-foreground">{isDownloading ? "Downloading..." : "Download"}</span>
             </button>
           </div>
 
