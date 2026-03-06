@@ -758,7 +758,11 @@ const TVChannelSection = ({ channels, search }: { channels: TVChannelItem[]; sea
 
 // ==================== ACTIVITY SECTION ====================
 const ActivitySection = ({ activities, search }: { activities: UserActivity[]; search: string }) => {
-  const filtered = activities.filter(a => a.userName.toLowerCase().includes(search.toLowerCase()) || a.details.toLowerCase().includes(search.toLowerCase()));
+  // Newest first
+  const sorted = [...activities].sort((a, b) =>
+    new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+  );
+  const filtered = sorted.filter(a => a.userName.toLowerCase().includes(search.toLowerCase()) || a.details.toLowerCase().includes(search.toLowerCase()));
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <table className="w-full text-xs">
@@ -795,6 +799,9 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
   const filtered = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()) || a.agentId.toLowerCase().includes(search.toLowerCase()));
   const [actionModal, setActionModal] = useState<{ type: string; agent: AgentItem } | null>(null);
   const [selectedPlan, setSelectedPlan] = useState("");
+  const [showAddAgent, setShowAddAgent] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", phone: "", plan: "Agent 1 Month" });
+  const [isAdding, setIsAdding] = useState(false);
   const { toast } = useToast();
 
   const handleAction = (type: string, agent: AgentItem) => setActionModal({ type, agent });
@@ -804,11 +811,54 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
     const { type, agent } = actionModal;
     try {
       if (type === "block") { await updateAgent(agent.id, { status: "blocked" }); toast({ title: "Agent blocked" }); }
-      else if (type === "activate") { await updateAgent(agent.id, { status: "active", plan: selectedPlan || agent.plan }); toast({ title: "Agent activated" }); }
+      else if (type === "activate") {
+        // Calculate expiry from selected plan
+        const planInfo = adminPlans.find(p => p.name === selectedPlan || p.name === agent.plan);
+        const expiry = planInfo ? new Date(Date.now() + planInfo.days * 86400000).toISOString().split("T")[0] : agent.planExpiry;
+        await updateAgent(agent.id, { status: "active", plan: selectedPlan || agent.plan, planExpiry: expiry });
+        toast({ title: "Agent activated" });
+      }
       else if (type === "remove") { await deleteAgent(agent.id); toast({ title: "Agent removed" }); }
     } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
     setActionModal(null);
     setSelectedPlan("");
+  };
+
+  const handleAddAgent = async () => {
+    if (!addForm.name || !addForm.phone) {
+      toast({ title: "Name and phone are required", variant: "destructive" });
+      return;
+    }
+    setIsAdding(true);
+    try {
+      const { generateAgentId, addAgent } = await import("@/lib/firebaseServices");
+      const newAgentId = generateAgentId();
+      const planInfo = adminPlans.find(p => p.name === addForm.plan);
+      const expiry = planInfo
+        ? new Date(Date.now() + (planInfo.days || 30) * 86400000).toISOString().split("T")[0]
+        : new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+
+      await addAgent({
+        name: addForm.name,
+        phone: addForm.phone,
+        agentId: newAgentId,
+        balance: 0,
+        sharedMovies: 0,
+        sharedSeries: 0,
+        totalEarnings: 0,
+        status: "active",
+        plan: addForm.plan,
+        planExpiry: expiry,
+        createdAt: new Date().toISOString().split("T")[0],
+      } as any);
+
+      toast({ title: "Agent created!", description: `Agent ID: ${newAgentId}` });
+      setShowAddAgent(false);
+      setAddForm({ name: "", phone: "", plan: "Agent 1 Month" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setIsAdding(false);
   };
 
   return (
