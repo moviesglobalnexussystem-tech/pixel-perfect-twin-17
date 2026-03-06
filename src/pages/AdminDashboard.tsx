@@ -1250,13 +1250,14 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
             <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
             <th className="text-left p-3 text-muted-foreground font-medium hidden sm:table-cell">Method</th>
             <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Date</th>
+            <th className="text-right p-3 text-muted-foreground font-medium">Del</th>
           </tr></thead>
           <tbody>
             {filtered.map(t => (
               <tr key={t.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="p-3 font-medium text-foreground">{t.userName}</td>
                 <td className="p-3 text-center">
-                  <Badge variant="outline" className={`text-[9px] capitalize ${t.type === "subscription" ? "border-primary text-primary" : t.type === "withdrawal" ? "border-accent text-accent" : "border-blue-400 text-blue-400"}`}>{t.type}</Badge>
+                  <Badge variant="outline" className={`text-[9px] capitalize ${t.type === "subscription" ? "border-primary text-primary" : t.type === "withdrawal" ? "border-accent text-accent" : "border-muted-foreground text-muted-foreground"}`}>{t.type}</Badge>
                 </td>
                 <td className="p-3 text-center font-bold">{t.amount.toLocaleString()}</td>
                 <td className="p-3 text-center">
@@ -1264,9 +1265,12 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
                 </td>
                 <td className="p-3 text-muted-foreground hidden sm:table-cell text-[10px]">{t.method}</td>
                 <td className="p-3 text-muted-foreground hidden md:table-cell text-[10px]">{t.createdAt}</td>
+                <td className="p-3 text-right">
+                  <button onClick={async () => { await deleteTransaction(t.id); toast({ title: "Transaction deleted" }); }} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground text-xs">No transactions yet.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-muted-foreground text-xs">No transactions yet.</td></tr>}
           </tbody>
         </table>
       </div>
