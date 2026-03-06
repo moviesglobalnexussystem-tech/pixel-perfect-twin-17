@@ -11,15 +11,18 @@ interface SubscribeModalProps {
   mode?: "user" | "agent";
 }
 
+// Updated plan prices as requested
 const userPlans = [
-  { id: "1day", label: "1 Day", price: "5,000", priceNum: 5000, duration: "24 hours access", days: 1 },
-  { id: "1week", label: "1 Week", price: "10,000", priceNum: 10000, duration: "7 days access", days: 7 },
-  { id: "1month", label: "1 Month", price: "25,000", priceNum: 25000, duration: "30 days access", days: 30 },
+  { id: "1day",   label: "1 Day",   price: "2,500",  priceNum: 2500,  duration: "24 hours access",  days: 1  },
+  { id: "3days",  label: "3 Days",  price: "5,000",  priceNum: 5000,  duration: "3 days access",    days: 3  },
+  { id: "1week",  label: "1 Week",  price: "10,000", priceNum: 10000, duration: "7 days access",    days: 7  },
+  { id: "1month", label: "1 Month", price: "25,000", priceNum: 25000, duration: "30 days access",   days: 30 },
 ];
 
 const agentPlans = [
-  { id: "agent-1week", label: "1 Week", price: "25,000", priceNum: 25000, duration: "7 days Agent access", days: 7 },
-  { id: "agent-1month", label: "1 Month", price: "50,000", priceNum: 50000, duration: "30 days Agent access", days: 30 },
+  { id: "agent-1day",   label: "1 Day",   price: "5,000",  priceNum: 5000,  duration: "24 hours Agent access", days: 1  },
+  { id: "agent-1week",  label: "1 Week",  price: "20,000", priceNum: 20000, duration: "7 days Agent access",   days: 7  },
+  { id: "agent-1month", label: "1 Month", price: "50,000", priceNum: 50000, duration: "30 days Agent access",  days: 30 },
 ];
 
 const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) => {
@@ -70,19 +73,20 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
 
       setStatusMessage("Waiting for you to confirm payment on your phone...");
 
-      // Poll for payment status
       cancelPollRef.current = pollPaymentStatus(
         result.internal_reference,
         async (statusData) => {
-          // Payment successful!
           setStatusMessage("Payment confirmed! Setting up your account...");
 
           try {
+            const now = new Date();
+            const expiry = new Date(now);
+            expiry.setDate(expiry.getDate() + planInfo.days);
+            const expiryStr = expiry.toISOString().split("T")[0];
+            const nowStr = now.toISOString().split("T")[0];
+
             if (mode === "agent") {
               const newAgentId = generateAgentId();
-              const now = new Date();
-              const expiry = new Date(now);
-              expiry.setDate(expiry.getDate() + planInfo.days);
 
               await addAgent({
                 name: name || phoneNumber,
@@ -94,8 +98,8 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
                 totalEarnings: 0,
                 status: "active",
                 plan: planInfo.label,
-                planExpiry: expiry.toISOString().split("T")[0],
-                createdAt: now.toISOString().split("T")[0],
+                planExpiry: expiryStr,
+                createdAt: nowStr,
               } as any);
 
               await addTransaction({
@@ -108,23 +112,18 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
                 method: "Mobile Money (Livra)",
                 description: `Agent ${planInfo.label} Plan`,
                 livraRef: result.internal_reference,
-                createdAt: now.toISOString().split("T")[0],
+                createdAt: nowStr,
               } as any);
 
               setGeneratedAgentId(newAgentId);
             } else {
-              // User subscription - update Firestore user record
-              const now = new Date();
-              const expiry = new Date(now);
-              expiry.setDate(expiry.getDate() + planInfo.days);
-
+              // User subscription - update Firestore user record with proper expiry
               if (user) {
                 const userDoc = await getUserByUid(user.uid);
                 if (userDoc) {
-                  const { updateUser } = await import("@/lib/firebaseServices");
                   await updateUser(userDoc.id, {
                     subscription: planInfo.label,
-                    subscriptionExpiry: expiry.toISOString().split("T")[0],
+                    subscriptionExpiry: expiryStr,
                     status: "active",
                   });
                 }
@@ -140,7 +139,7 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
                 method: "Mobile Money (Livra)",
                 description: `User ${planInfo.label} Subscription`,
                 livraRef: result.internal_reference,
-                createdAt: now.toISOString().split("T")[0],
+                createdAt: nowStr,
               } as any);
             }
 
@@ -154,8 +153,8 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
           toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
           setStep("failed");
         },
-        60, // max 60 attempts
-        5000 // every 5 seconds = 5 min max
+        60,
+        5000
       );
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });

@@ -1,16 +1,16 @@
 import { useLocation, useNavigate } from "react-router-dom";
-import { Film, Tv, Radio, Trophy, ShieldCheck, Download } from "lucide-react";
+import { Film, Tv, Radio, Trophy, ShieldCheck, Download, Home } from "lucide-react";
 import { useState } from "react";
 import AgentAccessModal from "./AgentAccessModal";
 import SubscribeModal from "./SubscribeModal";
 import { usePWAInstall } from "@/hooks/usePWAInstall";
 
 const navItems = [
-  { label: "Movies", path: "/movies", icon: Film },
-  { label: "Series", path: "/series", icon: Tv },
-  { label: "Agent", path: "#agent", icon: ShieldCheck, isCenter: true },
-  { label: "Live TV", path: "/tv-channel", icon: Radio },
-  { label: "Sport", path: "/live-sport", icon: Trophy },
+  { label: "Home",   path: "/",          icon: Home    },
+  { label: "Movies", path: "/movies",    icon: Film    },
+  { label: "Agent",  path: "#agent",     icon: ShieldCheck, isCenter: true },
+  { label: "Series", path: "/series",    icon: Tv      },
+  { label: "Sport",  path: "/live-sport", icon: Trophy  },
 ];
 
 const BottomNav = () => {
@@ -22,7 +22,8 @@ const BottomNav = () => {
 
   const isActive = (path: string) => {
     if (path.startsWith("#")) return false;
-    return location.pathname === path;
+    if (path === "/") return location.pathname === "/";
+    return location.pathname.startsWith(path);
   };
 
   const handleClick = (path: string) => {
@@ -36,20 +37,25 @@ const BottomNav = () => {
   return (
     <>
       <nav className="fixed bottom-0 left-0 right-0 z-50 lg:hidden">
-        {/* Glassmorphism background */}
-        <div className="bg-card/95 backdrop-blur-xl border-t border-border/60 shadow-[0_-4px_20px_rgba(0,0,0,0.3)]">
-          {canInstall && (
-            <div className="flex border-b border-border/60">
-              <button
-                onClick={install}
-                className="flex-1 flex items-center justify-center gap-1.5 py-2 bg-gradient-to-r from-primary/20 to-primary/10 text-primary text-[10px] font-bold active:scale-[0.98] transition-transform"
-              >
-                <Download className="w-3 h-3" /> Install App
-              </button>
-            </div>
-          )}
-          <div className="flex items-end justify-around px-2 pb-[env(safe-area-inset-bottom)] relative">
-            {navItems.map((item) => {
+        {/* Install banner */}
+        {canInstall && (
+          <div className="bg-primary/10 border-t border-primary/20">
+            <button
+              onClick={install}
+              className="w-full flex items-center justify-center gap-1.5 py-1.5 text-primary text-[10px] font-bold"
+            >
+              <Download className="w-3 h-3" /> Install App for Better Experience
+            </button>
+          </div>
+        )}
+
+        {/* Classic nav bar */}
+        <div className="relative bg-card border-t border-border/80 shadow-[0_-2px_20px_rgba(0,0,0,0.4)]">
+          {/* Top accent line */}
+          <div className="absolute top-0 left-0 right-0 h-px bg-gradient-to-r from-transparent via-primary/50 to-transparent" />
+
+          <div className="flex items-stretch h-[58px] pb-[env(safe-area-inset-bottom)]">
+            {navItems.map((item, index) => {
               const Icon = item.icon;
               const active = isActive(item.path);
 
@@ -58,13 +64,16 @@ const BottomNav = () => {
                   <button
                     key={item.label}
                     onClick={() => handleClick(item.path)}
-                    className="relative -mt-5 flex flex-col items-center"
+                    className="relative flex flex-col items-center justify-center flex-1 -mt-4"
+                    style={{ zIndex: 2 }}
                   >
-                    {/* Outer glow ring */}
-                    <div className="w-14 h-14 rounded-full bg-gradient-to-br from-primary to-primary/80 flex items-center justify-center shadow-[0_4px_15px_rgba(0,170,80,0.4)] border-[3px] border-background transition-transform active:scale-95">
-                      <Icon className="w-6 h-6 text-primary-foreground" />
+                    {/* Floating center button */}
+                    <div className="relative">
+                      <div className="w-[52px] h-[52px] rounded-full bg-primary shadow-[0_4px_20px_hsl(var(--primary)/0.5)] flex items-center justify-center border-[3px] border-background transition-all active:scale-95 hover:shadow-[0_6px_25px_hsl(var(--primary)/0.65)]">
+                        <Icon className="w-6 h-6 text-primary-foreground" />
+                      </div>
                     </div>
-                    <span className="text-primary text-[9px] font-bold mt-1">{item.label}</span>
+                    <span className="text-primary text-[9px] font-bold mt-0.5 tracking-wide">{item.label}</span>
                   </button>
                 );
               }
@@ -73,15 +82,16 @@ const BottomNav = () => {
                 <button
                   key={item.label}
                   onClick={() => handleClick(item.path)}
-                  className="flex flex-col items-center py-2.5 px-3 min-w-[56px] transition-colors"
+                  className="relative flex flex-col items-center justify-center flex-1 transition-all active:scale-95"
                 >
-                  <div className={`relative p-1.5 rounded-xl transition-colors ${active ? "bg-primary/15" : ""}`}>
-                    <Icon className={`w-5 h-5 transition-colors ${active ? "text-primary" : "text-muted-foreground"}`} />
-                    {active && (
-                      <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-1 h-1 rounded-full bg-primary" />
-                    )}
+                  {/* Active indicator bar at top */}
+                  {active && (
+                    <div className="absolute top-0 left-1/2 -translate-x-1/2 w-6 h-0.5 bg-primary rounded-b-full" />
+                  )}
+                  <div className={`p-1.5 rounded-xl transition-all ${active ? "bg-primary/15" : "bg-transparent"}`}>
+                    <Icon className={`w-[18px] h-[18px] transition-colors ${active ? "text-primary" : "text-muted-foreground"}`} />
                   </div>
-                  <span className={`text-[9px] font-medium mt-0.5 ${active ? "text-primary" : "text-muted-foreground"}`}>
+                  <span className={`text-[9px] font-semibold tracking-wide transition-colors ${active ? "text-primary" : "text-muted-foreground/70"}`}>
                     {item.label}
                   </span>
                 </button>
@@ -91,8 +101,8 @@ const BottomNav = () => {
         </div>
       </nav>
 
-      {/* Spacer for bottom nav */}
-      <div className="h-16 lg:hidden" />
+      {/* Spacer */}
+      <div className="h-[58px] lg:hidden" />
 
       <AgentAccessModal
         open={showAgentAccess}
