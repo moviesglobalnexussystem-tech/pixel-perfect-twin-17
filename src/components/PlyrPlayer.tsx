@@ -34,11 +34,9 @@ const PlyrPlayer = ({ src, poster, autoplay = false, className }: PlyrPlayerProp
       ],
       settings: ["captions", "quality", "speed"],
       speed: { selected: 1, options: [0.5, 0.75, 1, 1.25, 1.5, 2] },
-      i18n: { qualityLabel: { 0: "Auto" } },
-      poster: poster || "",
       autoplay,
       ratio: "16:9",
-    });
+    } as Plyr.Options);
 
     playerRef.current = player;
 
