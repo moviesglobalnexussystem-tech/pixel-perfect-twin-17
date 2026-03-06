@@ -758,7 +758,11 @@ const TVChannelSection = ({ channels, search }: { channels: TVChannelItem[]; sea
 
 // ==================== ACTIVITY SECTION ====================
 const ActivitySection = ({ activities, search }: { activities: UserActivity[]; search: string }) => {
-  const filtered = activities.filter(a => a.userName.toLowerCase().includes(search.toLowerCase()) || a.details.toLowerCase().includes(search.toLowerCase()));
+  // Newest first
+  const sorted = [...activities].sort((a, b) =>
+    new Date(b.timestamp || 0).getTime() - new Date(a.timestamp || 0).getTime()
+  );
+  const filtered = sorted.filter(a => a.userName.toLowerCase().includes(search.toLowerCase()) || a.details.toLowerCase().includes(search.toLowerCase()));
   return (
     <div className="bg-card border border-border rounded-xl overflow-hidden">
       <table className="w-full text-xs">
@@ -795,6 +799,9 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
   const filtered = agents.filter(a => a.name.toLowerCase().includes(search.toLowerCase()) || a.agentId.toLowerCase().includes(search.toLowerCase()));
   const [actionModal, setActionModal] = useState<{ type: string; agent: AgentItem } | null>(null);
   const [selectedPlan, setSelectedPlan] = useState("");
+  const [showAddAgent, setShowAddAgent] = useState(false);
+  const [addForm, setAddForm] = useState({ name: "", phone: "", plan: "Agent 1 Month" });
+  const [isAdding, setIsAdding] = useState(false);
   const { toast } = useToast();
 
   const handleAction = (type: string, agent: AgentItem) => setActionModal({ type, agent });
@@ -804,15 +811,62 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
     const { type, agent } = actionModal;
     try {
       if (type === "block") { await updateAgent(agent.id, { status: "blocked" }); toast({ title: "Agent blocked" }); }
-      else if (type === "activate") { await updateAgent(agent.id, { status: "active", plan: selectedPlan || agent.plan }); toast({ title: "Agent activated" }); }
+      else if (type === "activate") {
+        // Calculate expiry from selected plan
+        const planInfo = adminPlans.find(p => p.name === selectedPlan || p.name === agent.plan);
+        const expiry = planInfo ? new Date(Date.now() + planInfo.days * 86400000).toISOString().split("T")[0] : agent.planExpiry;
+        await updateAgent(agent.id, { status: "active", plan: selectedPlan || agent.plan, planExpiry: expiry });
+        toast({ title: "Agent activated" });
+      }
       else if (type === "remove") { await deleteAgent(agent.id); toast({ title: "Agent removed" }); }
     } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
     setActionModal(null);
     setSelectedPlan("");
   };
 
+  const handleAddAgent = async () => {
+    if (!addForm.name || !addForm.phone) {
+      toast({ title: "Name and phone are required", variant: "destructive" });
+      return;
+    }
+    setIsAdding(true);
+    try {
+      const { generateAgentId, addAgent } = await import("@/lib/firebaseServices");
+      const newAgentId = generateAgentId();
+      const planInfo = adminPlans.find(p => p.name === addForm.plan);
+      const expiry = planInfo
+        ? new Date(Date.now() + (planInfo.days || 30) * 86400000).toISOString().split("T")[0]
+        : new Date(Date.now() + 30 * 86400000).toISOString().split("T")[0];
+
+      await addAgent({
+        name: addForm.name,
+        phone: addForm.phone,
+        agentId: newAgentId,
+        balance: 0,
+        sharedMovies: 0,
+        sharedSeries: 0,
+        totalEarnings: 0,
+        status: "active",
+        plan: addForm.plan,
+        planExpiry: expiry,
+        createdAt: new Date().toISOString().split("T")[0],
+      } as any);
+
+      toast({ title: "Agent created!", description: `Agent ID: ${newAgentId}` });
+      setShowAddAgent(false);
+      setAddForm({ name: "", phone: "", plan: "Agent 1 Month" });
+    } catch (err: any) {
+      toast({ title: "Error", description: err.message, variant: "destructive" });
+    }
+    setIsAdding(false);
+  };
+
   return (
     <div>
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-xs text-muted-foreground">{filtered.length} agents</p>
+        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShowAddAgent(true)}><Plus className="w-3.5 h-3.5" /> Add Agent</Button>
+      </div>
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full text-xs">
           <thead><tr className="border-b border-border bg-secondary/50">
@@ -879,6 +933,40 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
           </div>
         </div>
       )}
+
+      {/* Add Agent Modal */}
+      {showAddAgent && (
+        <div className="fixed inset-0 bg-black/60 z-50 flex items-center justify-center p-4" onClick={() => setShowAddAgent(false)}>
+          <div className="bg-card border border-border rounded-xl p-5 w-full max-w-sm" onClick={e => e.stopPropagation()}>
+            <h3 className="text-sm font-bold text-foreground mb-4">Add New Agent</h3>
+            <div className="space-y-3 mb-4">
+              <div>
+                <label className="text-muted-foreground text-[10px] block mb-1">Agent Name *</label>
+                <Input value={addForm.name} onChange={e => setAddForm({ ...addForm, name: e.target.value })} placeholder="Full name" className="h-9 text-xs bg-secondary border-border" />
+              </div>
+              <div>
+                <label className="text-muted-foreground text-[10px] block mb-1">Phone Number *</label>
+                <Input value={addForm.phone} onChange={e => setAddForm({ ...addForm, phone: e.target.value })} placeholder="07XXXXXXXX" className="h-9 text-xs bg-secondary border-border" />
+              </div>
+              <div>
+                <label className="text-muted-foreground text-[10px] block mb-1">Agent Plan</label>
+                <select className="w-full h-9 rounded-lg border border-border bg-secondary text-foreground text-xs px-3" value={addForm.plan} onChange={e => setAddForm({ ...addForm, plan: e.target.value })}>
+                  {adminPlans.filter(p => p.type === "agent").map(p => (
+                    <option key={p.id} value={p.name}>{p.name} — UGX {p.price.toLocaleString()} / {p.duration}</option>
+                  ))}
+                </select>
+              </div>
+              <p className="text-[10px] text-muted-foreground">An Agent ID will be auto-generated for this agent.</p>
+            </div>
+            <div className="flex gap-2">
+              <Button size="sm" variant="outline" className="flex-1 h-8 text-xs" onClick={() => setShowAddAgent(false)}>Cancel</Button>
+              <Button size="sm" className="flex-1 h-8 text-xs" onClick={handleAddAgent} disabled={isAdding || !addForm.name || !addForm.phone}>
+                {isAdding ? "Creating..." : "Create Agent"}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -886,7 +974,11 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
 // ==================== USERS SECTION ====================
 const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) => {
   const [tab, setTab] = useState<"all" | "active" | "never">("all");
-  const filtered = users.filter(u => {
+  // Sort newest first
+  const sortedUsers = [...users].sort((a, b) =>
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+  const filtered = sortedUsers.filter(u => {
     const matchSearch = u.name.toLowerCase().includes(search.toLowerCase()) || u.phone.includes(search);
     if (tab === "active") return matchSearch && u.subscription !== null;
     if (tab === "never") return matchSearch && u.subscription === null;
@@ -902,7 +994,19 @@ const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) 
     try {
       if (type === "delete") { await deleteUser(user.id); toast({ title: "User deleted" }); }
       else if (type === "block") { await updateUser(user.id, { status: "blocked" }); toast({ title: "User blocked" }); }
-      else if (type === "activate" || type === "upgrade") { await updateUser(user.id, { status: "active", subscription: selectedPlan || user.subscription }); toast({ title: "User updated" }); }
+      else if (type === "activate" || type === "upgrade") {
+        // Find plan duration and compute expiry
+        const planInfo = adminPlans.find(p => p.name === selectedPlan);
+        const expiry = planInfo
+          ? new Date(Date.now() + planInfo.days * 86400000).toISOString().split("T")[0]
+          : user.subscriptionExpiry;
+        await updateUser(user.id, {
+          status: "active",
+          subscription: selectedPlan || user.subscription,
+          subscriptionExpiry: expiry || null,
+        });
+        toast({ title: "User subscription activated", description: selectedPlan ? `${selectedPlan} until ${expiry}` : "Updated" });
+      }
       else if (type === "deactivate") { await updateUser(user.id, { subscription: null, subscriptionExpiry: null }); toast({ title: "Subscription deactivated" }); }
     } catch (err: any) { toast({ title: "Error", description: err.message, variant: "destructive" }); }
     setActionModal(null);
@@ -971,9 +1075,15 @@ const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) 
                 <select className="w-full h-9 rounded-lg border border-border bg-secondary text-foreground text-xs px-3" value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)}>
                   <option value="">-- Select Plan --</option>
                   {adminPlans.filter(p => p.type === "user").map(p => (
-                    <option key={p.id} value={p.name}>{p.name} - {p.price.toLocaleString()} UGX / {p.duration}</option>
+                    <option key={p.id} value={p.name}>{p.name} — UGX {p.price.toLocaleString()} / {p.duration}</option>
                   ))}
                 </select>
+                {selectedPlan && (() => {
+                  const plan = adminPlans.find(p => p.name === selectedPlan);
+                  if (!plan) return null;
+                  const expiry = new Date(Date.now() + plan.days * 86400000).toLocaleDateString();
+                  return <p className="text-[10px] text-primary mt-1">Access until: <strong>{expiry}</strong></p>;
+                })()}
               </div>
             )}
             <div className="flex gap-2 justify-end">
@@ -989,7 +1099,11 @@ const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) 
 
 // ==================== WALLET SECTION ====================
 const WalletSection = ({ transactions, search }: { transactions: WalletTransaction[]; search: string }) => {
-  const filtered = transactions.filter(t => t.userName.toLowerCase().includes(search.toLowerCase()) || t.type.includes(search.toLowerCase()));
+  // Newest first
+  const sortedTx = [...transactions].sort((a, b) =>
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+  const filtered = sortedTx.filter(t => t.userName.toLowerCase().includes(search.toLowerCase()) || t.type.includes(search.toLowerCase()));
   const { toast } = useToast();
   const [livraBalance, setLivraBalance] = useState(0);
   const [livraTransactions, setLivraTransactions] = useState<any[]>([]);
@@ -1136,13 +1250,14 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
             <th className="text-center p-3 text-muted-foreground font-medium">Status</th>
             <th className="text-left p-3 text-muted-foreground font-medium hidden sm:table-cell">Method</th>
             <th className="text-left p-3 text-muted-foreground font-medium hidden md:table-cell">Date</th>
+            <th className="text-right p-3 text-muted-foreground font-medium">Del</th>
           </tr></thead>
           <tbody>
             {filtered.map(t => (
               <tr key={t.id} className="border-b border-border/50 hover:bg-secondary/30 transition-colors">
                 <td className="p-3 font-medium text-foreground">{t.userName}</td>
                 <td className="p-3 text-center">
-                  <Badge variant="outline" className={`text-[9px] capitalize ${t.type === "subscription" ? "border-primary text-primary" : t.type === "withdrawal" ? "border-accent text-accent" : "border-blue-400 text-blue-400"}`}>{t.type}</Badge>
+                  <Badge variant="outline" className={`text-[9px] capitalize ${t.type === "subscription" ? "border-primary text-primary" : t.type === "withdrawal" ? "border-accent text-accent" : "border-muted-foreground text-muted-foreground"}`}>{t.type}</Badge>
                 </td>
                 <td className="p-3 text-center font-bold">{t.amount.toLocaleString()}</td>
                 <td className="p-3 text-center">
@@ -1150,9 +1265,12 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
                 </td>
                 <td className="p-3 text-muted-foreground hidden sm:table-cell text-[10px]">{t.method}</td>
                 <td className="p-3 text-muted-foreground hidden md:table-cell text-[10px]">{t.createdAt}</td>
+                <td className="p-3 text-right">
+                  <button onClick={async () => { await deleteTransaction(t.id); toast({ title: "Transaction deleted" }); }} className="p-1 rounded hover:bg-secondary text-muted-foreground hover:text-destructive"><Trash2 className="w-3 h-3" /></button>
+                </td>
               </tr>
             ))}
-            {filtered.length === 0 && <tr><td colSpan={6} className="p-8 text-center text-muted-foreground text-xs">No transactions yet.</td></tr>}
+            {filtered.length === 0 && <tr><td colSpan={7} className="p-8 text-center text-muted-foreground text-xs">No transactions yet.</td></tr>}
           </tbody>
         </table>
       </div>

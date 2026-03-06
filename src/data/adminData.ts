@@ -226,12 +226,13 @@ export const mockTransactions: WalletTransaction[] = [
 ];
 
 export const adminPlans = [
-  { id: "p1", name: "Basic Weekly", price: 25000, duration: "1 Week", type: "user" },
-  { id: "p2", name: "Basic Monthly", price: 50000, duration: "1 Month", type: "user" },
-  { id: "p3", name: "VIP Weekly", price: 40000, duration: "1 Week", type: "user" },
-  { id: "p4", name: "VIP Monthly", price: 80000, duration: "1 Month", type: "user" },
-  { id: "p5", name: "Agent Weekly", price: 25000, duration: "1 Week", type: "agent" },
-  { id: "p6", name: "Agent Monthly", price: 50000, duration: "1 Month", type: "agent" },
-  { id: "p7", name: "Agent Renewal Weekly", price: 20000, duration: "1 Week", type: "agent-renewal" },
-  { id: "p8", name: "Agent Renewal Monthly", price: 30000, duration: "1 Month", type: "agent-renewal" },
+  // User plans
+  { id: "p1", name: "1 Day",   price: 2500,  duration: "1 Day",   days: 1,  type: "user" },
+  { id: "p2", name: "3 Days",  price: 5000,  duration: "3 Days",  days: 3,  type: "user" },
+  { id: "p3", name: "1 Week",  price: 10000, duration: "1 Week",  days: 7,  type: "user" },
+  { id: "p4", name: "1 Month", price: 25000, duration: "1 Month", days: 30, type: "user" },
+  // Agent plans
+  { id: "p5", name: "Agent 1 Day",   price: 5000,  duration: "1 Day",   days: 1,  type: "agent" },
+  { id: "p6", name: "Agent 1 Week",  price: 20000, duration: "1 Week",  days: 7,  type: "agent" },
+  { id: "p7", name: "Agent 1 Month", price: 50000, duration: "1 Month", days: 30, type: "agent" },
 ];
