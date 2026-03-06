@@ -48,23 +48,20 @@ const PlyrPlayer = ({ src, poster, autoplay = false, className }: PlyrPlayerProp
       hls.attachMedia(video);
 
       hls.on(Hls.Events.MANIFEST_PARSED, (_, data) => {
-        const levels = data.levels;
-        const availableQualities = levels.map((l) => l.height).filter(Boolean);
-        availableQualities.unshift(0); // auto
+        // Expose available quality levels via Plyr quality event
+        const availableQualities = data.levels.map((l) => l.height).filter(Boolean);
+        availableQualities.unshift(0); // 0 = Auto
 
-        player.config.quality = {
-          default: 0,
-          options: availableQualities,
-          forced: true,
-          onChange: (newQuality: number) => {
-            if (newQuality === 0) {
-              hls.currentLevel = -1; // Auto
-            } else {
-              const levelIndex = hls.levels.findIndex((l) => l.height === newQuality);
-              if (levelIndex !== -1) hls.currentLevel = levelIndex;
-            }
-          },
-        };
+        // Listen for Plyr's quality change event
+        player.on("qualitychange" as any, (evt: any) => {
+          const newQuality = evt.detail.plyr.quality;
+          if (newQuality === 0) {
+            hls.currentLevel = -1;
+          } else {
+            const levelIndex = hls.levels.findIndex((l) => l.height === newQuality);
+            if (levelIndex !== -1) hls.currentLevel = levelIndex;
+          }
+        });
 
         if (autoplay) video.play().catch(() => {});
       });
