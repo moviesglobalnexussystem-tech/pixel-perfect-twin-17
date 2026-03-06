@@ -1075,9 +1075,15 @@ const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) 
                 <select className="w-full h-9 rounded-lg border border-border bg-secondary text-foreground text-xs px-3" value={selectedPlan} onChange={e => setSelectedPlan(e.target.value)}>
                   <option value="">-- Select Plan --</option>
                   {adminPlans.filter(p => p.type === "user").map(p => (
-                    <option key={p.id} value={p.name}>{p.name} - {p.price.toLocaleString()} UGX / {p.duration}</option>
+                    <option key={p.id} value={p.name}>{p.name} — UGX {p.price.toLocaleString()} / {p.duration}</option>
                   ))}
                 </select>
+                {selectedPlan && (() => {
+                  const plan = adminPlans.find(p => p.name === selectedPlan);
+                  if (!plan) return null;
+                  const expiry = new Date(Date.now() + plan.days * 86400000).toLocaleDateString();
+                  return <p className="text-[10px] text-primary mt-1">Access until: <strong>{expiry}</strong></p>;
+                })()}
               </div>
             )}
             <div className="flex gap-2 justify-end">
@@ -1093,7 +1099,11 @@ const UsersSection = ({ users, search }: { users: UserItem[]; search: string }) 
 
 // ==================== WALLET SECTION ====================
 const WalletSection = ({ transactions, search }: { transactions: WalletTransaction[]; search: string }) => {
-  const filtered = transactions.filter(t => t.userName.toLowerCase().includes(search.toLowerCase()) || t.type.includes(search.toLowerCase()));
+  // Newest first
+  const sortedTx = [...transactions].sort((a, b) =>
+    new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+  );
+  const filtered = sortedTx.filter(t => t.userName.toLowerCase().includes(search.toLowerCase()) || t.type.includes(search.toLowerCase()));
   const { toast } = useToast();
   const [livraBalance, setLivraBalance] = useState(0);
   const [livraTransactions, setLivraTransactions] = useState<any[]>([]);
