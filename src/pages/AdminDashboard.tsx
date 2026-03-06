@@ -863,6 +863,10 @@ const AgentSection = ({ agents, search }: { agents: AgentItem[]; search: string 
 
   return (
     <div>
+      <div className="flex justify-between items-center mb-4">
+        <p className="text-xs text-muted-foreground">{filtered.length} agents</p>
+        <Button size="sm" className="h-8 text-xs gap-1.5" onClick={() => setShowAddAgent(true)}><Plus className="w-3.5 h-3.5" /> Add Agent</Button>
+      </div>
       <div className="bg-card border border-border rounded-xl overflow-hidden">
         <table className="w-full text-xs">
           <thead><tr className="border-b border-border bg-secondary/50">
