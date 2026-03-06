@@ -1,17 +1,19 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
 import {
-  ArrowLeft, Play, Download, DollarSign, Film, Share2, Timer, X, Copy, Check
+  ArrowLeft, Play, Download, DollarSign, Share2, Timer, X, Copy, Check
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
-import ArtPlayerComponent from "@/components/ArtPlayerComponent";
+import PlyrPlayer from "@/components/PlyrPlayer";
 import {
   subscribeSharedLinks, addSharedLink, subscribeEpisodes,
   subscribeMovies, type SharedLink
 } from "@/lib/firebaseServices";
 import type { EpisodeItem, MovieItem } from "@/data/adminData";
+
+const DOWNLOAD_PROXY = "https://download.mainplatform-nexus.workers.dev/?url=";
 
 const AgentWatch = () => {
   const { id } = useParams();
@@ -55,7 +57,6 @@ const AgentWatch = () => {
     return unsub;
   }, [agentData]);
 
-  // Load episodes if series
   useEffect(() => {
     const seriesId = state?.seriesId || contentId;
     if (!seriesId) return;
@@ -69,7 +70,6 @@ const AgentWatch = () => {
     return unsub;
   }, [contentId]);
 
-  // Load related agent movies
   useEffect(() => {
     const unsub = subscribeMovies((movies) => {
       setRelatedMovies(movies.filter(m => m.isAgent && m.id !== contentId).slice(0, 6));
@@ -123,9 +123,7 @@ const AgentWatch = () => {
     setTimeout(() => setCopiedId(null), 2000);
   };
 
-  
-
-  const handleDownload = async () => {
+  const handleDownload = () => {
     if (!downloadLink) {
       toast({ title: "No download available", variant: "destructive" });
       return;
@@ -133,35 +131,22 @@ const AgentWatch = () => {
     const fileName = currentEpisode
       ? `${title} - Episode ${currentEpisode.episodeNumber}.mp4`
       : `${title}.mp4`;
+
     setIsDownloading(true);
-    toast({ title: "Preparing download...", description: "Fetching video file..." });
-    try {
-      const response = await fetch(downloadLink);
-      if (!response.ok) throw new Error("fetch_failed");
-      const blob = await response.blob();
-      const blobUrl = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
-      const a = document.createElement("a");
-      a.href = blobUrl;
-      a.download = fileName;
-      a.style.display = "none";
-      document.body.appendChild(a);
-      a.click();
-      setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(blobUrl); }, 5000);
-      toast({ title: "Download started!", description: fileName });
-    } catch {
-      // Fallback: hidden iframe
-      try {
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        iframe.src = downloadLink;
-        document.body.appendChild(iframe);
-        setTimeout(() => document.body.removeChild(iframe), 10000);
-        toast({ title: "Download started!", description: fileName });
-      } catch {
-        toast({ title: "Download failed", description: "The video server may not support direct downloads.", variant: "destructive" });
-      }
-    }
-    setIsDownloading(false);
+    toast({ title: "Download starting...", description: fileName });
+
+    const proxiedUrl = `${DOWNLOAD_PROXY}${encodeURIComponent(downloadLink)}`;
+    const a = document.createElement("a");
+    a.href = proxiedUrl;
+    a.download = fileName;
+    a.rel = "noopener noreferrer";
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      document.body.removeChild(a);
+      setIsDownloading(false);
+    }, 1500);
   };
 
   const contentSharedLinks = sharedLinks.filter(l => l.contentId === contentId);
@@ -173,9 +158,9 @@ const AgentWatch = () => {
       </button>
 
       {/* Player */}
-      <div className="relative w-full max-h-[480px] aspect-video bg-black">
+      <div className="relative w-full bg-black" style={{ aspectRatio: "16/9", maxHeight: "480px" }}>
         {streamLink ? (
-          <ArtPlayerComponent key={streamLink} src={streamLink} poster={image} autoplay />
+          <PlyrPlayer key={`${contentId}-${currentEpisode?.id || "main"}`} src={streamLink} poster={image} autoplay />
         ) : (
           <div className="w-full h-full relative">
             <img src={image} alt={title} className="w-full h-full object-cover" />
@@ -195,8 +180,8 @@ const AgentWatch = () => {
         </button>
         <button onClick={handleDownload} disabled={isDownloading}
           className="flex-1 flex flex-col items-center gap-0.5 bg-card border border-border rounded-lg py-2 hover:bg-secondary transition-colors disabled:opacity-50">
-          <Download className={`w-4 h-4 text-muted-foreground ${isDownloading ? "animate-pulse" : ""}`} />
-          <span className="text-[10px] font-medium text-muted-foreground">{isDownloading ? "Downloading..." : "Download"}</span>
+          <Download className={`w-4 h-4 text-muted-foreground ${isDownloading ? "animate-bounce" : ""}`} />
+          <span className="text-[10px] font-medium text-muted-foreground">{isDownloading ? "Starting..." : "Download"}</span>
         </button>
       </div>
 
@@ -206,7 +191,7 @@ const AgentWatch = () => {
           <div className="bg-card border border-border rounded-xl p-3">
             <h3 className="text-foreground text-xs font-semibold mb-2">Episodes</h3>
             <div className="grid grid-cols-8 gap-1.5">
-              {episodes.map((ep) => (
+              {episodes.map(ep => (
                 <button key={ep.id} onClick={() => setCurrentEpisode(ep)}
                   className={`flex flex-col items-center justify-center rounded-lg border text-[10px] font-medium py-1.5 transition-colors
                     ${currentEpisode?.id === ep.id ? "border-primary bg-primary/15 text-primary" : "border-border bg-secondary/40 text-foreground hover:bg-secondary"}`}>
@@ -225,12 +210,12 @@ const AgentWatch = () => {
         {state?.genre && <p className="text-muted-foreground text-xs mt-1">{state.genre}</p>}
       </div>
 
-      {/* Active sell links for this content */}
+      {/* Active sell links */}
       {contentSharedLinks.length > 0 && (
         <div className="px-4 pb-4">
           <h3 className="text-foreground text-sm font-semibold mb-2">Your Sell Links</h3>
           <div className="space-y-2">
-            {contentSharedLinks.map((link) => (
+            {contentSharedLinks.map(link => (
               <div key={link.id} className="bg-card border border-border rounded-lg p-3 flex items-center gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -254,9 +239,11 @@ const AgentWatch = () => {
         <div className="px-4 pb-6">
           <h2 className="text-foreground text-sm font-bold mb-3">More Agent Content</h2>
           <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-2">
-            {relatedMovies.map((m) => (
+            {relatedMovies.map(m => (
               <div key={m.id} className="flex-shrink-0 w-[110px] cursor-pointer group"
-                onClick={() => navigate(`/agent-watch/${m.id}`, { state: { firebaseId: m.id, title: m.name, image: m.posterUrl, streamLink: m.streamLink, downloadLink: m.downloadLink, type: "Movie", genre: m.genre } })}>
+                onClick={() => navigate(`/agent-watch/${m.id}`, {
+                  state: { firebaseId: m.id, title: m.name, image: m.posterUrl, streamLink: m.streamLink, downloadLink: m.downloadLink, type: "Movie", genre: m.genre }
+                })}>
                 <div className="relative rounded-md overflow-hidden mb-1 aspect-[2/3]">
                   <img src={m.posterUrl || "/placeholder.svg"} alt={m.name} className="w-full h-full object-cover group-hover:scale-105 transition-transform" />
                 </div>
@@ -282,16 +269,17 @@ const AgentWatch = () => {
             <div className="space-y-3 mb-4">
               <div>
                 <label className="text-muted-foreground text-[10px] block mb-1">Set Price (UGX)</label>
-                <input type="number" value={sellPrice} onChange={(e) => setSellPrice(e.target.value)} placeholder="e.g. 2000"
+                <input type="number" value={sellPrice} onChange={e => setSellPrice(e.target.value)} placeholder="e.g. 2000"
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
               </div>
               <div>
                 <label className="text-muted-foreground text-[10px] block mb-1">Access Duration (minutes) — Min 30</label>
-                <input type="number" value={sellDuration} onChange={(e) => setSellDuration(e.target.value)} placeholder="60" min={30}
+                <input type="number" value={sellDuration} onChange={e => setSellDuration(e.target.value)} placeholder="60" min={30}
                   className="w-full bg-secondary border border-border rounded-lg px-3 py-2 text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring" />
                 <div className="flex gap-1.5 mt-1.5">
                   {[30, 60, 120, 1440].map(m => (
-                    <button key={m} onClick={() => setSellDuration(String(m))} className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${sellDuration === String(m) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
+                    <button key={m} onClick={() => setSellDuration(String(m))}
+                      className={`px-2 py-0.5 rounded text-[10px] border transition-colors ${sellDuration === String(m) ? "border-primary bg-primary/10 text-primary" : "border-border text-muted-foreground"}`}>
                       {m < 60 ? `${m}m` : m < 1440 ? `${m / 60}h` : "24h"}
                     </button>
                   ))}

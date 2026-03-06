@@ -1,17 +1,20 @@
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { Play, MessageSquare, Clock, Share2, Monitor, Smartphone, ChevronRight, Star, ArrowLeft, Download, Send, Trash2, Lock } from "lucide-react";
-import { subscribeMovies, subscribeSeries, getEpisodesBySeries, subscribeComments, addComment, deleteComment, addWatchLater, subscribeWatchLater, deleteWatchLater, subscribeEpisodes, getUserByUid } from "@/lib/firebaseServices";
+import { Play, MessageSquare, Share2, Monitor, Smartphone, Star, ArrowLeft, Download, Send, Trash2, Lock } from "lucide-react";
+import { subscribeMovies, subscribeEpisodes, subscribeComments, addComment, deleteComment, addWatchLater, subscribeWatchLater, deleteWatchLater, getUserByUid } from "@/lib/firebaseServices";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { EpisodeItem, CommentItem, WatchLaterItem, UserItem } from "@/data/adminData";
 import SportPlayer from "@/components/SportPlayer";
-import ArtPlayerComponent from "@/components/ArtPlayerComponent";
-import { useState, useEffect, useCallback } from "react";
+import PlyrPlayer from "@/components/PlyrPlayer";
+import { useState, useEffect } from "react";
 import LogoLoader from "@/components/LogoLoader";
 import type { Drama } from "@/data/dramas";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import SubscribeModal from "@/components/SubscribeModal";
+
+const ADMIN_EMAIL = "mainplatform.nexus@gmail.com";
+const DOWNLOAD_PROXY = "https://download.mainplatform-nexus.workers.dev/?url=";
 
 // ==================== SPORT WATCH ====================
 const SportWatch = () => {
@@ -61,7 +64,7 @@ const SportWatch = () => {
               state?.isLive && !isPlayingHighlight ? (
                 <SportPlayer key={currentVideoUrl} src={currentVideoUrl} />
               ) : (
-                <ArtPlayerComponent key={currentVideoUrl} src={currentVideoUrl} autoplay />
+                <PlyrPlayer key={currentVideoUrl} src={currentVideoUrl} autoplay />
               )
             ) : (
               <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
@@ -114,56 +117,27 @@ const SportWatch = () => {
   );
 };
 
-// ==================== HELPER: Check if user has active subscription ====================
-const checkUserSubscription = (userDoc: UserItem | null): boolean => {
+// ==================== HELPERS ====================
+const checkUserSubscription = (userDoc: UserItem | null, isAdmin: boolean): boolean => {
+  if (isAdmin) return true; // admin always has access
   if (!userDoc) return false;
   if (!userDoc.subscription || !userDoc.subscriptionExpiry) return false;
   const expiry = new Date(userDoc.subscriptionExpiry);
   return expiry.getTime() > Date.now() && userDoc.status !== "blocked";
 };
 
-// ==================== HELPER: Download video file ====================
-const downloadVideoFile = async (
-  url: string,
-  fileName: string,
-  onStart: () => void,
-  onEnd: () => void,
-  onError: (msg: string) => void,
-  onSuccess: (name: string) => void
-) => {
-  onStart();
-  try {
-    // Try direct fetch (works if CORS is enabled)
-    const response = await fetch(url);
-    if (!response.ok) throw new Error("fetch_failed");
-    const blob = await response.blob();
-    const blobUrl = URL.createObjectURL(new Blob([blob], { type: "video/mp4" }));
-    const a = document.createElement("a");
-    a.href = blobUrl;
-    a.download = fileName;
-    a.style.display = "none";
-    document.body.appendChild(a);
-    a.click();
-    // Clean up after a delay
-    setTimeout(() => {
-      document.body.removeChild(a);
-      URL.revokeObjectURL(blobUrl);
-    }, 5000);
-    onSuccess(fileName);
-  } catch {
-    // Fallback: use a hidden iframe to trigger download without navigating
-    try {
-      const iframe = document.createElement("iframe");
-      iframe.style.display = "none";
-      iframe.src = url;
-      document.body.appendChild(iframe);
-      setTimeout(() => document.body.removeChild(iframe), 10000);
-      onSuccess(fileName);
-    } catch {
-      onError("Download failed. The video server may not support direct downloads.");
-    }
-  }
-  onEnd();
+// Download using CORS proxy - no new tab, real filename
+const handleProxyDownload = (videoUrl: string, fileName: string) => {
+  if (!videoUrl) return;
+  const proxiedUrl = `${DOWNLOAD_PROXY}${encodeURIComponent(videoUrl)}`;
+  const a = document.createElement("a");
+  a.href = proxiedUrl;
+  a.download = fileName;
+  a.rel = "noopener noreferrer";
+  a.style.display = "none";
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => document.body.removeChild(a), 1000);
 };
 
 // ==================== DRAMA WATCH ====================
@@ -189,6 +163,8 @@ const Watch = () => {
   const [userDoc, setUserDoc] = useState<UserItem | null>(null);
   const isSport = id?.startsWith("sport-");
 
+  const isAdmin = user?.email === ADMIN_EMAIL;
+
   const firebaseState = location.state as {
     firebaseId?: string;
     title?: string;
@@ -207,15 +183,15 @@ const Watch = () => {
     agentMarkedAt?: string | null;
   } | null;
 
-  // Check user subscription status
+  // Load user doc
   useEffect(() => {
     if (!user) { setUserDoc(null); return; }
-    getUserByUid(user.uid).then(doc => setUserDoc(doc));
+    getUserByUid(user.uid).then(d => setUserDoc(d));
   }, [user]);
 
-  const hasSubscription = checkUserSubscription(userDoc);
+  const hasSubscription = checkUserSubscription(userDoc, isAdmin);
 
-  // Reset states when id changes (fix: player not changing on recommended click)
+  // Reset ALL state when id changes (critical fix for player not changing)
   useEffect(() => {
     setDrama(null);
     setCurrentEpisode(null);
@@ -225,7 +201,7 @@ const Watch = () => {
     setIsLoading(true);
   }, [id]);
 
-  // Load content from Firestore
+  // Load content
   useEffect(() => {
     if (isSport || !id) return;
 
@@ -284,16 +260,20 @@ const Watch = () => {
     loadContent();
 
     const unsub1 = subscribeMovies((movies) => {
-      setRecommended(movies.filter(m => !m.isAgent).slice(0, 7).map((m, i) => ({
+      const sorted = [...movies].sort((a, b) =>
+        new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime()
+      );
+      setRecommended(sorted.filter(m => !m.isAgent).slice(0, 7).map((m, i) => ({
         id: i + 6000, title: m.name, image: m.posterUrl || "/placeholder.svg",
         firebaseId: m.id, streamLink: m.streamLink, genre: m.genre,
         rating: m.rating, description: m.description, downloadLink: m.downloadLink,
+        createdAt: m.createdAt,
       })));
     });
     return () => { unsub1(); };
   }, [id, isSport]);
 
-  // Subscribe to episodes for this content
+  // Episodes
   useEffect(() => {
     const contentId = firebaseState?.firebaseId || id;
     if (!contentId || isSport) return;
@@ -309,7 +289,7 @@ const Watch = () => {
     return unsub;
   }, [id, firebaseState?.firebaseId, isSport]);
 
-  // Subscribe to comments
+  // Comments
   useEffect(() => {
     if (!id) return;
     const contentId = firebaseState?.firebaseId || id;
@@ -317,7 +297,7 @@ const Watch = () => {
     return unsub;
   }, [id, firebaseState?.firebaseId]);
 
-  // Subscribe to watch later
+  // Watch later
   useEffect(() => {
     if (!user) return;
     const unsub = subscribeWatchLater(user.uid, setWatchLaterItems);
@@ -340,7 +320,6 @@ const Watch = () => {
     );
   }
 
-  // Check if content is agent-only
   const isAgentContent = drama.isAgent;
   const agentMarkedDate = drama.agentMarkedAt ? new Date(drama.agentMarkedAt) : null;
   const daysSinceMarked = agentMarkedDate ? Math.floor((Date.now() - agentMarkedDate.getTime()) / (1000 * 60 * 60 * 24)) : 999;
@@ -361,8 +340,7 @@ const Watch = () => {
     try {
       const contentId = firebaseState?.firebaseId || id || "";
       await addComment({
-        contentId,
-        userId: user.uid,
+        contentId, userId: user.uid,
         userName: user.displayName || user.email || "User",
         text: newComment.trim(),
         createdAt: new Date().toISOString(),
@@ -375,7 +353,7 @@ const Watch = () => {
 
   const handleWatchLater = async () => {
     if (!user) {
-      toast({ title: "Login required", description: "Please login to save", variant: "destructive" });
+      toast({ title: "Login required", variant: "destructive" });
       return;
     }
     const contentId = firebaseState?.firebaseId || id || "";
@@ -385,8 +363,7 @@ const Watch = () => {
       toast({ title: "Removed from Watch Later" });
     } else {
       await addWatchLater({
-        userId: user.uid,
-        contentId,
+        userId: user.uid, contentId,
         contentTitle: drama.title,
         contentImage: drama.image,
         contentType: "movie",
@@ -396,18 +373,13 @@ const Watch = () => {
     }
   };
 
-  const isInWatchLater = watchLaterItems.some(w => w.contentId === (firebaseState?.firebaseId || id));
-
   const handleShare = async () => {
     const url = window.location.href;
-    const text = `Watch "${drama.title}" on LUO FILM`;
     if (navigator.share) {
-      try {
-        await navigator.share({ title: drama.title, text, url });
-      } catch {}
+      try { await navigator.share({ title: drama.title, url }); } catch {}
     } else {
       await navigator.clipboard.writeText(url);
-      toast({ title: "Link copied!", description: "Share it with friends" });
+      toast({ title: "Link copied!" });
     }
   };
 
@@ -417,39 +389,33 @@ const Watch = () => {
       return;
     }
     if (!hasSubscription) {
-      toast({ title: "Subscription required", description: "Subscribe to download content", variant: "destructive" });
+      toast({ title: "Subscription required", variant: "destructive" });
       setShowSubscribe(true);
       return;
     }
-    const downloadUrl = currentEpisode?.downloadLink || currentEpisode?.streamLink || (drama as any).downloadLink || drama.streamLink;
-    if (!downloadUrl) {
+    const rawUrl = currentEpisode?.downloadLink || currentEpisode?.streamLink
+      || (drama as any).downloadLink || drama.streamLink;
+
+    if (!rawUrl) {
       toast({ title: "No download available", variant: "destructive" });
       return;
     }
+
     const fileName = currentEpisode
       ? `${drama.title} - Episode ${currentEpisode.episodeNumber}.mp4`
       : `${drama.title}.mp4`;
-    
-    downloadVideoFile(
-      downloadUrl,
-      fileName,
-      () => { setIsDownloading(true); toast({ title: "Preparing download...", description: "Fetching video file..." }); },
-      () => setIsDownloading(false),
-      (msg) => toast({ title: "Download failed", description: msg, variant: "destructive" }),
-      (name) => toast({ title: "Download started!", description: name })
-    );
+
+    setIsDownloading(true);
+    toast({ title: "Download starting...", description: fileName });
+    handleProxyDownload(rawUrl, fileName);
+    setTimeout(() => setIsDownloading(false), 2000);
   };
 
-  const handleWatchOnTV = () => {
-    toast({ title: "Watch on TV", description: "Open the LUO FILM TV app and scan the QR code or enter the code shown on your TV" });
-  };
-
-  const handleWatchOnApp = () => {
-    toast({ title: "Install LUO FILM App", description: "Add to home screen from your browser menu for the best experience" });
-  };
-
-  // Require subscription to play & download
+  // Require subscription to play & download (admin always passes)
   const requiresSubscription = !user || !hasSubscription;
+
+  // Current video src (for player key — critical for switching)
+  const currentVideoSrc = currentEpisode?.streamLink || drama.streamLink || "";
 
   return (
     <div className="min-h-screen bg-background">
@@ -460,17 +426,19 @@ const Watch = () => {
       <div className="flex flex-col lg:flex-row">
         <div className="flex-1 min-w-0">
           {/* Video Player */}
-          <div className="relative w-full max-h-[480px] aspect-video bg-black">
+          <div className="relative w-full bg-black" style={{ aspectRatio: "16/9", maxHeight: "520px" }}>
             {requiresSubscription ? (
               <div className="w-full h-full relative">
                 <img src={drama.image} alt={drama.title} className="w-full h-full object-cover blur-sm" />
-                <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center gap-3">
+                <div className="absolute inset-0 bg-black/65 flex flex-col items-center justify-center gap-3">
                   <Lock className="w-12 h-12 text-primary" />
                   <p className="text-foreground text-sm font-bold">
                     {!user ? "Login & Subscribe to Watch" : "Subscribe to Watch"}
                   </p>
                   <p className="text-muted-foreground text-xs text-center px-8">
-                    {isStillOnAgent ? "This is exclusive Agent content. Subscribe to Agent plan to watch." : "Get a subscription plan to enjoy unlimited streaming"}
+                    {isStillOnAgent
+                      ? "This is exclusive Agent content. Subscribe to Agent plan to watch."
+                      : "Get a subscription plan to enjoy unlimited streaming"}
                   </p>
                   <button onClick={() => { setSubscribeMode(isStillOnAgent ? "agent" : "user"); setShowSubscribe(true); }}
                     className="bg-primary text-primary-foreground px-6 py-2 rounded-full text-xs font-bold hover:bg-primary/90">
@@ -478,8 +446,13 @@ const Watch = () => {
                   </button>
                 </div>
               </div>
-            ) : (currentEpisode?.streamLink || drama.streamLink) ? (
-              <ArtPlayerComponent key={currentEpisode?.streamLink || drama.streamLink || ""} src={currentEpisode?.streamLink || drama.streamLink || ""} poster={drama.image} autoplay />
+            ) : currentVideoSrc ? (
+              <PlyrPlayer
+                key={`${id}-${currentEpisode?.id || "movie"}`}
+                src={currentVideoSrc}
+                poster={drama.image}
+                autoplay
+              />
             ) : (
               <>
                 <img src={drama.image} alt={drama.title} className="w-full h-full object-cover" />
@@ -503,13 +476,14 @@ const Watch = () => {
               <MessageSquare className="w-3.5 h-3.5 text-muted-foreground" />
               <span className="text-[9px] font-medium text-muted-foreground">{comments.length} Comments</span>
             </button>
-            <button onClick={handleDownload} disabled={isDownloading} className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95 disabled:opacity-50">
-              <Download className={`w-3.5 h-3.5 text-primary-foreground ${isDownloading ? "animate-pulse" : ""}`} />
-              <span className="text-[9px] font-bold text-primary-foreground">{isDownloading ? "Downloading..." : "Download"}</span>
+            <button onClick={handleDownload} disabled={isDownloading}
+              className="flex-1 flex flex-col items-center gap-0.5 bg-gradient-to-br from-primary to-primary/70 border border-primary/30 rounded-lg py-1.5 hover:shadow-[0_2px_12px_hsl(135_100%_37%/0.4)] transition-all active:scale-95 disabled:opacity-50">
+              <Download className={`w-3.5 h-3.5 text-primary-foreground ${isDownloading ? "animate-bounce" : ""}`} />
+              <span className="text-[9px] font-bold text-primary-foreground">{isDownloading ? "Starting..." : "Download"}</span>
             </button>
           </div>
 
-          {/* Episodes Grid - Mobile only */}
+          {/* Episodes Grid - Mobile */}
           {drama.episodes && (
             <div className="lg:hidden px-4 pb-3">
               <div className="bg-card border border-border rounded-xl p-3">
@@ -520,15 +494,12 @@ const Watch = () => {
                 {episodes.length > 0 ? (
                   <div className="grid grid-cols-8 gap-1.5">
                     {episodes.map((ep) => (
-                      <button
-                        key={ep.id}
+                      <button key={ep.id}
                         onClick={() => { if (ep.streamLink) setCurrentEpisode(ep); }}
                         className={`flex flex-col items-center justify-center rounded-lg border text-[10px] font-medium py-1.5 transition-colors
                           ${currentEpisode?.id === ep.id
                             ? "border-primary bg-primary/15 text-primary"
-                            : "border-border bg-secondary/40 text-foreground hover:bg-secondary"
-                          }`}
-                      >
+                            : "border-border bg-secondary/40 text-foreground hover:bg-secondary"}`}>
                         {ep.episodeNumber}
                       </button>
                     ))}
@@ -540,20 +511,22 @@ const Watch = () => {
             </div>
           )}
 
-          {/* Comments Section */}
+          {/* Comments */}
           {showComments && (
             <div className="px-4 py-3 border-b border-border">
               <h3 className="text-foreground text-sm font-bold mb-3">Comments ({comments.length})</h3>
               <div className="flex gap-2 mb-3">
-                <input type="text" value={newComment} onChange={(e) => setNewComment(e.target.value)} placeholder={user ? "Write a comment..." : "Login to comment"}
+                <input type="text" value={newComment} onChange={e => setNewComment(e.target.value)}
+                  placeholder={user ? "Write a comment..." : "Login to comment"}
                   className="flex-1 h-9 px-3 rounded-lg bg-secondary border border-border text-foreground text-xs placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
-                  onKeyDown={(e) => e.key === "Enter" && handleAddComment()} disabled={!user} />
-                <button onClick={handleAddComment} disabled={!user || !newComment.trim()} className="h-9 px-3 bg-primary text-primary-foreground rounded-lg text-xs font-medium disabled:opacity-40">
+                  onKeyDown={e => e.key === "Enter" && handleAddComment()} disabled={!user} />
+                <button onClick={handleAddComment} disabled={!user || !newComment.trim()}
+                  className="h-9 px-3 bg-primary text-primary-foreground rounded-lg text-xs font-medium disabled:opacity-40">
                   <Send className="w-3.5 h-3.5" />
                 </button>
               </div>
               <div className="space-y-2 max-h-[300px] overflow-y-auto scrollbar-thin">
-                {comments.map((c) => (
+                {comments.map(c => (
                   <div key={c.id} className="flex gap-2 p-2 bg-secondary/30 rounded-lg">
                     <div className="w-7 h-7 rounded-full bg-primary/20 flex items-center justify-center text-primary text-[10px] font-bold shrink-0">
                       {c.userName.charAt(0).toUpperCase()}
@@ -572,7 +545,7 @@ const Watch = () => {
                     )}
                   </div>
                 ))}
-                {comments.length === 0 && <p className="text-muted-foreground text-xs text-center py-4">No comments yet. Be the first!</p>}
+                {comments.length === 0 && <p className="text-muted-foreground text-xs text-center py-4">No comments yet.</p>}
               </div>
             </div>
           )}
@@ -585,43 +558,28 @@ const Watch = () => {
             </div>
             {drama.rating && (
               <div className="flex items-center gap-2 mb-2">
-                <div className="flex items-center gap-1">
-                  <Star className="w-3.5 h-3.5 text-accent fill-accent" />
-                  <span className="text-accent text-sm font-bold">{drama.rating}</span>
-                </div>
-                <span className="text-primary text-xs cursor-pointer hover:underline">Rate now</span>
+                <Star className="w-3.5 h-3.5 text-accent fill-accent" />
+                <span className="text-accent text-sm font-bold">{drama.rating}</span>
               </div>
             )}
-
-            {/* Badges */}
             <div className="flex items-center gap-1.5 mb-2 flex-wrap">
-              {drama.rank && <span className="bg-accent text-accent-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">TOP {drama.rank}</span>}
               {drama.isHotDrama && <span className="bg-destructive text-destructive-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">Hot</span>}
               {drama.isOriginal && <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">Original</span>}
               {drama.isVip && <span className="bg-primary text-primary-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">VIP</span>}
               {isStillOnAgent && <span className="bg-accent text-accent-foreground text-[10px] font-bold px-1.5 py-0.5 rounded">🔥 Agent Exclusive</span>}
             </div>
-
-            {/* Genre Tags */}
             {genreList.length > 0 && (
               <div className="flex items-center gap-1.5 mb-3 flex-wrap">
-                {genreList.map((tag) => (
-                  <span key={tag} className="bg-secondary text-secondary-foreground text-[10px] px-2 py-0.5 rounded cursor-pointer hover:bg-muted">{tag}</span>
+                {genreList.map(tag => (
+                  <span key={tag} className="bg-secondary text-secondary-foreground text-[10px] px-2 py-0.5 rounded">{tag}</span>
                 ))}
               </div>
             )}
-
-            {/* Description */}
             {drama.description && (
-              <div className="mb-4">
-                <p className="text-muted-foreground text-xs leading-relaxed">
-                  <span className="text-foreground font-medium">Description: </span>
-                  {drama.description}
-                </p>
-              </div>
+              <p className="text-muted-foreground text-xs leading-relaxed mb-4">
+                <span className="text-foreground font-medium">Description: </span>{drama.description}
+              </p>
             )}
-
-            {/* Cast */}
             {actorList.length > 0 && (
               <div className="mb-6">
                 <h3 className="text-foreground text-sm font-bold mb-2">Cast</h3>
@@ -647,15 +605,15 @@ const Watch = () => {
               <div>
                 <h2 className="text-foreground text-base font-bold mb-3">Recommended</h2>
                 <div className="flex gap-2.5 overflow-x-auto scrollbar-hide pb-2">
-                  {recommended.map((d) => (
-                    <div key={d.firebaseId || d.id} className="flex-shrink-0 w-[120px] cursor-pointer group"
+                  {recommended.map(d => (
+                    <div key={d.firebaseId || d.id}
+                      className="flex-shrink-0 w-[120px] cursor-pointer group"
                       onClick={() => navigate(`/watch/${d.firebaseId}`, {
                         state: {
                           firebaseId: d.firebaseId, title: d.title, image: d.image,
                           streamLink: d.streamLink, genre: d.genre, rating: d.rating,
                           description: d.description, downloadLink: d.downloadLink,
                         },
-                        replace: false,
                       })}>
                       <div className="relative rounded-md overflow-hidden mb-1.5 aspect-[2/3]">
                         <img src={d.image} alt={d.title} className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
@@ -669,14 +627,12 @@ const Watch = () => {
           </div>
         </div>
 
-        {/* Right Sidebar - Only for series on desktop */}
+        {/* Right Sidebar - Desktop series */}
         {drama.episodes && (
           <div className="hidden lg:block w-[300px] border-l border-border flex-shrink-0">
             <div className="px-4 py-3 border-b border-border">
               <h2 className="text-foreground font-bold text-sm">{drama.title}</h2>
             </div>
-
-            {/* Tabs */}
             <div className="flex border-b border-border">
               <button onClick={() => setActiveTab("episodes")}
                 className={`flex-1 py-2.5 text-xs font-medium text-center transition-colors ${activeTab === "episodes" ? "text-foreground border-b-2 border-primary" : "text-muted-foreground hover:text-foreground"}`}>
@@ -687,8 +643,6 @@ const Watch = () => {
                 🎵 Highlights
               </button>
             </div>
-
-            {/* Episode Grid */}
             <div className="overflow-y-auto max-h-[400px] scrollbar-thin p-3">
               {episodes.length > 0 ? (
                 <>
@@ -696,16 +650,13 @@ const Watch = () => {
                     <span className="text-muted-foreground text-[11px]">Episodes 1-{episodes.length}</span>
                   </div>
                   <div className="grid grid-cols-6 gap-1.5">
-                    {episodes.map((ep) => (
-                      <button
-                        key={ep.id}
+                    {episodes.map(ep => (
+                      <button key={ep.id}
                         onClick={() => { if (ep.streamLink) setCurrentEpisode(ep); }}
                         className={`relative flex flex-col items-center justify-center rounded border text-[11px] font-medium py-2 px-1 transition-colors
                           ${currentEpisode?.id === ep.id
                             ? "border-primary bg-primary/15 text-primary"
-                            : "border-border bg-secondary/40 text-foreground hover:bg-secondary hover:border-muted-foreground/40"
-                          }`}
-                      >
+                            : "border-border bg-secondary/40 text-foreground hover:bg-secondary hover:border-muted-foreground/40"}`}>
                         <span>{ep.episodeNumber}</span>
                         {ep.streamLink && <span className="text-[8px] text-muted-foreground mt-0.5">Play</span>}
                       </button>
@@ -713,9 +664,7 @@ const Watch = () => {
                   </div>
                 </>
               ) : (
-                <div className="p-6 text-center text-muted-foreground text-xs">
-                  {drama.episodes ? `${drama.episodes}` : "No episodes available"}
-                </div>
+                <div className="p-6 text-center text-muted-foreground text-xs">No episodes available</div>
               )}
             </div>
           </div>
