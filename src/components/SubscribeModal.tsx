@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from "react";
-import { X, Crown, Phone, CheckCircle, Smartphone, Loader2 } from "lucide-react";
-import { addAgent, generateAgentId, addTransaction, getUserByUid, updateUser } from "@/lib/firebaseServices";
-import { requestDeposit, pollPaymentStatus } from "@/lib/livraPayment";
+import { useState } from "react";
+import { X, Crown, Phone, CheckCircle, Smartphone, ExternalLink } from "lucide-react";
+import { createCheckout } from "@/lib/livraPayment";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -11,7 +10,6 @@ interface SubscribeModalProps {
   mode?: "user" | "agent";
 }
 
-// Updated plan prices as requested
 const userPlans = [
   { id: "1day",   label: "1 Day",   price: "2,500",  priceNum: 2500,  duration: "24 hours access",  days: 1  },
   { id: "3days",  label: "3 Days",  price: "5,000",  priceNum: 5000,  duration: "3 days access",    days: 3  },
@@ -29,16 +27,9 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
   const [selectedPlan, setSelectedPlan] = useState<string | null>(null);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [name, setName] = useState("");
-  const [step, setStep] = useState<"plan" | "pay" | "processing" | "success" | "failed">("plan");
-  const [generatedAgentId, setGeneratedAgentId] = useState("");
-  const [statusMessage, setStatusMessage] = useState("Sending payment prompt to your phone...");
+  const [step, setStep] = useState<"plan" | "pay" | "loading">("plan");
   const { toast } = useToast();
   const { user } = useAuth();
-  const cancelPollRef = useRef<(() => void) | null>(null);
-
-  useEffect(() => {
-    return () => { cancelPollRef.current?.(); };
-  }, []);
 
   if (!open) return null;
 
@@ -50,125 +41,55 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
 
   const handlePay = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneNumber.length < 10 || !selectedPlan) return;
+    if (!selectedPlan) return;
 
     const planInfo = plans.find(p => p.id === selectedPlan);
     if (!planInfo) return;
 
-    setStep("processing");
-    setStatusMessage("Sending payment prompt to your phone...");
+    setStep("loading");
+
+    const origin = window.location.origin;
+    const uid = user?.uid || "";
+    const email = user?.email || phoneNumber + "@luofilm.app";
+
+    // Build success & failure callback URLs
+    let successUrl: string;
+    if (mode === "user") {
+      successUrl = `${origin}/payment/callback?status=success&type=sub&plan=${encodeURIComponent(planInfo.label)}&uid=${uid}&days=${planInfo.days}&amount=${planInfo.priceNum}`;
+    } else {
+      successUrl = `${origin}/payment/callback?status=success&type=agent&plan=${encodeURIComponent(planInfo.label)}&agentName=${encodeURIComponent(name || phoneNumber)}&agentPhone=${encodeURIComponent(phoneNumber)}&days=${planInfo.days}&amount=${planInfo.priceNum}`;
+    }
+    const failureUrl = `${origin}/payment/callback?status=failed`;
 
     try {
-      const description = mode === "agent"
-        ? `LUO FILM Agent ${planInfo.label} Plan`
-        : `LUO FILM ${planInfo.label} Subscription`;
+      const result = await createCheckout(planInfo.priceNum, email, successUrl, failureUrl);
 
-      const result = await requestDeposit(phoneNumber, planInfo.priceNum, description);
-
-      if (!result.success || !result.internal_reference) {
-        toast({ title: "Payment failed", description: result.error || "Could not initiate payment", variant: "destructive" });
-        setStep("failed");
+      if (!result.success || !result.checkoutUrl) {
+        toast({ title: "Payment failed", description: result.error || "Could not initiate checkout", variant: "destructive" });
+        setStep("pay");
         return;
       }
 
-      setStatusMessage("Waiting for you to confirm payment on your phone...");
+      // Open checkout in new tab
+      window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
 
-      cancelPollRef.current = pollPaymentStatus(
-        result.internal_reference,
-        async (statusData) => {
-          setStatusMessage("Payment confirmed! Setting up your account...");
-
-          try {
-            const now = new Date();
-            const expiry = new Date(now);
-            expiry.setDate(expiry.getDate() + planInfo.days);
-            const expiryStr = expiry.toISOString().split("T")[0];
-            const nowStr = now.toISOString().split("T")[0];
-
-            if (mode === "agent") {
-              const newAgentId = generateAgentId();
-
-              await addAgent({
-                name: name || phoneNumber,
-                phone: phoneNumber,
-                agentId: newAgentId,
-                balance: 0,
-                sharedMovies: 0,
-                sharedSeries: 0,
-                totalEarnings: 0,
-                status: "active",
-                plan: planInfo.label,
-                planExpiry: expiryStr,
-                createdAt: nowStr,
-              } as any);
-
-              await addTransaction({
-                userId: "",
-                userName: name || phoneNumber,
-                userPhone: phoneNumber,
-                type: "subscription",
-                amount: planInfo.priceNum,
-                status: "completed",
-                method: "Mobile Money (Livra)",
-                description: `Agent ${planInfo.label} Plan`,
-                livraRef: result.internal_reference,
-                createdAt: nowStr,
-              } as any);
-
-              setGeneratedAgentId(newAgentId);
-            } else {
-              // User subscription - update Firestore user record with proper expiry
-              if (user) {
-                const userDoc = await getUserByUid(user.uid);
-                if (userDoc) {
-                  await updateUser(userDoc.id, {
-                    subscription: planInfo.label,
-                    subscriptionExpiry: expiryStr,
-                    status: "active",
-                  });
-                }
-              }
-
-              await addTransaction({
-                userId: user?.uid || "",
-                userName: user?.displayName || phoneNumber,
-                userPhone: phoneNumber,
-                type: "subscription",
-                amount: planInfo.priceNum,
-                status: "completed",
-                method: "Mobile Money (Livra)",
-                description: `User ${planInfo.label} Subscription`,
-                livraRef: result.internal_reference,
-                createdAt: nowStr,
-              } as any);
-            }
-
-            setStep("success");
-          } catch (err: any) {
-            toast({ title: "Account setup error", description: err.message, variant: "destructive" });
-            setStep("failed");
-          }
-        },
-        (errorMsg) => {
-          toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
-          setStep("failed");
-        },
-        60,
-        5000
-      );
+      // Reset and close modal – subscription will be activated on return
+      toast({
+        title: "Payment page opened",
+        description: "Complete payment in the new tab. Your access will activate automatically.",
+      });
+      handleClose();
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
-      setStep("failed");
+      setStep("pay");
     }
   };
 
   const handleClose = () => {
-    cancelPollRef.current?.();
     setStep("plan");
     setSelectedPlan(null);
     setPhoneNumber("");
     setName("");
-    setGeneratedAgentId("");
     onClose();
   };
 
@@ -213,7 +134,7 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
         {step === "pay" && (
           <form onSubmit={handlePay} className="px-6 pb-6 space-y-4">
             <div className="bg-secondary rounded-xl p-4 text-center">
-              <p className="text-muted-foreground text-[11px]">Pay with Mobile Money</p>
+              <p className="text-muted-foreground text-[11px]">Pay with Mobile Money / Card</p>
               <div className="flex items-center justify-center gap-3 mt-2">
                 <Smartphone className="w-5 h-5 text-accent" />
                 <span className="text-foreground font-bold text-lg">
@@ -233,65 +154,36 @@ const SubscribeModal = ({ open, onClose, mode = "user" }: SubscribeModalProps) =
                 className="w-full h-10 pl-10 pr-3 rounded-lg bg-secondary border border-border text-foreground text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50" />
             </div>
             <p className="text-muted-foreground text-[10px] text-center">
-              A payment prompt will be sent to your phone. Enter your PIN to confirm.
+              A secure payment page will open. Complete payment there — your access activates automatically.
             </p>
             <div className="flex gap-2">
               <button type="button" onClick={() => setStep("plan")} className="flex-1 h-10 bg-secondary text-foreground font-medium text-sm rounded-lg hover:bg-muted transition-colors">
                 Back
               </button>
-              <button type="submit" className="flex-1 h-10 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 transition-colors">
+              <button type="submit" disabled={step === "loading" as any}
+                className="flex-1 h-10 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 transition-colors flex items-center justify-center gap-1.5">
+                <ExternalLink className="w-3.5 h-3.5" />
                 Pay Now
               </button>
             </div>
           </form>
         )}
 
-        {step === "processing" && (
+        {step === "loading" && (
           <div className="px-6 pb-6 text-center space-y-4">
-            <Loader2 className="w-12 h-12 text-primary animate-spin mx-auto" />
-            <div>
-              <p className="text-foreground font-bold text-base">Processing Payment</p>
-              <p className="text-muted-foreground text-xs mt-1">{statusMessage}</p>
-              <p className="text-muted-foreground text-[10px] mt-2">Check your phone for the payment prompt and enter your PIN.</p>
-            </div>
-            <button onClick={handleClose} className="text-muted-foreground text-[10px] hover:text-foreground">
-              Cancel
-            </button>
+            <div className="w-12 h-12 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto" />
+            <p className="text-foreground font-bold text-base">Opening payment page...</p>
+            <p className="text-muted-foreground text-xs">Allow popups if blocked by your browser.</p>
           </div>
         )}
 
-        {step === "success" && (
-          <div className="px-6 pb-6 text-center space-y-4">
-            <CheckCircle className="w-12 h-12 text-primary mx-auto" />
-            <div>
-              <p className="text-foreground font-bold text-base">Payment Successful!</p>
-              <p className="text-muted-foreground text-xs mt-1">
-                {mode === "agent"
-                  ? <>Your Agent ID: <span className="text-primary font-bold text-base">{generatedAgentId}</span><br/><span className="text-[10px]">Save this ID — you'll use it to log in to the Agent Dashboard</span></>
-                  : "Your subscription is now active. Enjoy unlimited streaming!"}
-              </p>
-            </div>
-            <button onClick={handleClose} className="w-full h-10 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 transition-colors">
-              {mode === "agent" ? "Done" : "Start Watching"}
-            </button>
-          </div>
-        )}
-
-        {step === "failed" && (
-          <div className="px-6 pb-6 text-center space-y-4">
-            <X className="w-12 h-12 text-destructive mx-auto" />
-            <div>
-              <p className="text-foreground font-bold text-base">Payment Failed</p>
-              <p className="text-muted-foreground text-xs mt-1">The payment was not completed. Please try again.</p>
-            </div>
-            <button onClick={() => setStep("pay")} className="w-full h-10 bg-primary text-primary-foreground font-semibold text-sm rounded-lg hover:bg-primary/90 transition-colors">
-              Try Again
-            </button>
-            <button onClick={handleClose} className="w-full text-muted-foreground text-xs text-center hover:text-foreground">
-              Cancel
-            </button>
-          </div>
-        )}
+        {/* Activate manually if user returns */}
+        <div className="px-6 pb-4">
+          <p className="text-[10px] text-muted-foreground text-center">
+            Already paid?{" "}
+            <button onClick={handleClose} className="text-primary underline">Close and refresh</button>
+          </p>
+        </div>
       </div>
     </div>
   );

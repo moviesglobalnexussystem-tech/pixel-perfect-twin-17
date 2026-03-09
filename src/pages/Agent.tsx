@@ -16,7 +16,7 @@ import {
 } from "@/lib/firebaseServices";
 import type { MovieItem, SeriesItem, EpisodeItem } from "@/data/adminData";
 import { useNavigate } from "react-router-dom";
-import { requestDeposit, requestWithdraw, pollPaymentStatus } from "@/lib/livraPayment";
+import { initiatePayout, createCheckout } from "@/lib/livraPayment";
 
 interface ContentItem {
   id: string;
