@@ -1140,7 +1140,7 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
     }
     setIsProcessing(true);
     try {
-      const result = await requestWithdraw(withdrawNumber, amt, "LUO FILM Admin Withdrawal");
+      const result = await requestWithdraw(withdrawNumber, amt, "Admin", "LUO FILM Admin Withdrawal");
       if (!result.success) {
         toast({ title: "Withdrawal failed", description: result.error, variant: "destructive" });
         setIsProcessing(false);
@@ -1154,9 +1154,9 @@ const WalletSection = ({ transactions, search }: { transactions: WalletTransacti
         type: "withdrawal",
         amount: amt,
         status: "completed",
-        method: "Mobile Money (Livra)",
+        method: "Mobile Money (Fincra)",
         description: "Admin withdrawal",
-        livraRef: result.internal_reference,
+        livraRef: result.reference || "",
         createdAt: new Date().toISOString().split("T")[0],
       } as any);
 

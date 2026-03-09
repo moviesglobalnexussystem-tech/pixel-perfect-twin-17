@@ -16,7 +16,7 @@ import {
 } from "@/lib/firebaseServices";
 import type { MovieItem, SeriesItem, EpisodeItem } from "@/data/adminData";
 import { useNavigate } from "react-router-dom";
-import { requestDeposit, requestWithdraw, pollPaymentStatus } from "@/lib/livraPayment";
+import { initiatePayout, createCheckout } from "@/lib/livraPayment";
 
 interface ContentItem {
   id: string;
@@ -150,23 +150,19 @@ const Agent = () => {
       toast({ title: "Invalid amount", description: "Minimum withdrawal is UGX 1,000", variant: "destructive" });
       return;
     }
-    const fee = Math.ceil(amt * 0.05); // 5% withdrawal fee
+    const fee = Math.ceil(amt * 0.05);
     const netAmount = amt - fee;
-    
+
     setIsProcessing(true);
     try {
-      // Real Livra withdrawal
-      const result = await requestWithdraw(withdrawNumber, netAmount, `LUO FILM Agent Withdraw: ${agentData.name}`);
+      const result = await initiatePayout(withdrawNumber, netAmount, agentData.name, `LUO FILM Agent Withdraw: ${agentData.name}`);
       if (!result.success) {
         toast({ title: "Withdrawal failed", description: result.error || "Could not process withdrawal", variant: "destructive" });
         setIsProcessing(false);
         return;
       }
 
-      // Deduct full amount from agent balance
       await updateAgent(agentData.id, { balance: agentBalance - amt });
-      
-      // Record agent withdrawal transaction
       await addTransaction({
         userId: agentData.id,
         userName: agentData.name,
@@ -174,9 +170,9 @@ const Agent = () => {
         type: "withdrawal",
         amount: amt,
         status: "completed",
-        method: `${withdrawProvider} (Livra)`,
+        method: `${withdrawProvider} (Fincra)`,
         description: `Agent withdraw: UGX ${netAmount.toLocaleString()} sent, UGX ${fee.toLocaleString()} fee (5%)`,
-        livraRef: result.internal_reference,
+        livraRef: result.reference || "",
         createdAt: new Date().toISOString().split("T")[0],
       } as any);
 
@@ -184,7 +180,7 @@ const Agent = () => {
       setShowWithdrawModal(false);
       setWithdrawAmount("");
       setWithdrawNumber("");
-      toast({ title: "Withdrawal successful!", description: `UGX ${netAmount.toLocaleString()} sent to ${withdrawProvider}. Fee: UGX ${fee.toLocaleString()} (5%)` });
+      toast({ title: "Withdrawal successful!", description: `UGX ${netAmount.toLocaleString()} sent. Fee: UGX ${fee.toLocaleString()} (5%)` });
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
     }
@@ -195,62 +191,33 @@ const Agent = () => {
     if (!renewNumber || !agentData) return;
     setIsProcessing(true);
     try {
-      const description = `LUO FILM Agent Renewal: ${renewPlan === "month" ? "Monthly" : "Weekly"}`;
-      const result = await requestDeposit(renewNumber, renewPrice, description);
-      
-      if (!result.success || !result.internal_reference) {
+      const origin = window.location.origin;
+      const renewDays = renewPlan === "month" ? 30 : 7;
+      const planLabel = renewPlan === "month" ? "1 Month" : "1 Week";
+      const successUrl = `${origin}/payment/callback?status=success&type=agent-renew&agentId=${agentData.id}&plan=${encodeURIComponent(planLabel)}&agentName=${encodeURIComponent(agentData.name)}&agentPhone=${encodeURIComponent(agentData.phone)}&days=${renewDays}&amount=${renewPrice}`;
+      const failureUrl = `${origin}/payment/callback?status=failed`;
+
+      const result = await createCheckout(
+        renewPrice,
+        agentData.phone + "@luofilm.app",
+        successUrl,
+        failureUrl
+      );
+
+      if (!result.success || !result.checkoutUrl) {
         toast({ title: "Payment failed", description: result.error || "Could not initiate payment", variant: "destructive" });
         setIsProcessing(false);
         return;
       }
 
-      toast({ title: "Payment prompt sent", description: "Check your phone and enter your PIN" });
-
-      // Poll for status
-      pollPaymentStatus(
-        result.internal_reference,
-        async () => {
-          // Success
-          const expiry = new Date();
-          if (renewPlan === "month") expiry.setMonth(expiry.getMonth() + 1);
-          else expiry.setDate(expiry.getDate() + 7);
-
-          await updateAgent(agentData.id, {
-            status: "active",
-            planExpiry: expiry.toISOString().split("T")[0],
-            plan: renewPlan === "month" ? "Monthly" : "Weekly",
-          });
-
-          await addTransaction({
-            userId: agentData.id,
-            userName: agentData.name,
-            userPhone: agentData.phone,
-            type: "subscription",
-            amount: renewPrice,
-            status: "completed",
-            method: "Mobile Money (Livra)",
-            description: `Agent renewal: ${renewPlan === "month" ? "Monthly" : "Weekly"}`,
-            livraRef: result.internal_reference,
-            createdAt: new Date().toISOString().split("T")[0],
-          } as any);
-
-          setAgentData({ ...agentData, planExpiry: expiry.toISOString().split("T")[0], status: "active" });
-          setShowRenewModal(false);
-          setRenewNumber("");
-          setIsProcessing(false);
-          toast({ title: "Subscription renewed!" });
-        },
-        (errorMsg) => {
-          toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
-          setIsProcessing(false);
-        },
-        60,
-        5000
-      );
+      window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+      toast({ title: "Payment page opened", description: "Complete payment in the new tab. Your plan will renew automatically." });
+      setShowRenewModal(false);
+      setRenewNumber("");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
-      setIsProcessing(false);
     }
+    setIsProcessing(false);
   };
 
   const renewPrice = renewPlan === "week" ? 20000 : 30000;

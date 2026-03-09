@@ -13,7 +13,7 @@ import {
 import type { SharedLink } from "@/lib/firebaseServices";
 import type { MovieItem } from "@/data/adminData";
 import ArtPlayerComponent from "@/components/ArtPlayerComponent";
-import { requestDeposit, pollPaymentStatus } from "@/lib/livraPayment";
+import { createCheckout } from "@/lib/livraPayment";
 
 // Device fingerprint for audience "login"
 const getDeviceId = (): string => {
@@ -128,81 +128,29 @@ const AudiencePage = () => {
   };
 
   const handlePay = async () => {
-    if (!phoneNumber || !content) {
-      toast({ title: "Enter phone number", variant: "destructive" });
-      return;
-    }
+    if (!content) return;
     setStep("processing");
-    setStatusMessage("Sending payment prompt to your phone...");
-    
+    setStatusMessage("Opening secure payment page...");
+
     try {
-      const description = `LUO FILM: ${content.contentTitle} (${accessDuration}min access)`;
-      const result = await requestDeposit(phoneNumber, content.price, description);
-      
-      if (!result.success || !result.internal_reference) {
-        toast({ title: "Payment failed", description: result.error || "Could not initiate payment", variant: "destructive" });
+      const origin = window.location.origin;
+      // After payment, the callback page will grant access via localStorage
+      const successUrl = `${origin}/payment/callback?status=success&type=audience&shareCode=${encodeURIComponent(shareCode || "")}&price=${content.price}&accessDuration=${accessDuration}&agentId=${encodeURIComponent(content.agentId || "")}&contentTitle=${encodeURIComponent(content.contentTitle || "")}&agentDocId=${encodeURIComponent(content.agentDocId || "")}`;
+      const failureUrl = `${origin}/payment/callback?status=failed`;
+      const email = phoneNumber ? phoneNumber + "@luofilm.app" : "guest@luofilm.app";
+
+      const result = await createCheckout(content.price, email, successUrl, failureUrl);
+      if (!result.success || !result.checkoutUrl) {
+        toast({ title: "Payment failed", description: result.error || "Could not initiate checkout", variant: "destructive" });
         setStep("payment");
         return;
       }
 
-      setStatusMessage("Waiting for you to confirm payment on your phone...");
-
-      // Poll for payment status
-      const cancelPoll = pollPaymentStatus(
-        result.internal_reference,
-        async (statusData) => {
-          // Payment successful!
-          try {
-            await addTransaction({
-              userId: getDeviceId(),
-              userName: phoneNumber,
-              userPhone: phoneNumber,
-              type: "agent-share",
-              amount: content.price,
-              status: "completed",
-              method: `Mobile Money (Livra)`,
-              description: `Agent sell: ${content.contentTitle}`,
-              livraRef: result.internal_reference,
-              createdAt: new Date().toISOString().split("T")[0],
-            } as any);
-
-            await updateSharedLink(content.id, {
-              views: (content.views || 0) + 1,
-              earnings: (content.earnings || 0) + content.price,
-            });
-
-            // Credit the agent's balance
-            try {
-              const agent = await getAgentByAgentId(content.agentId);
-              if (agent) {
-                const { updateAgent } = await import("@/lib/firebaseServices");
-                await updateAgent(agent.id, {
-                  balance: (agent.balance || 0) + content.price,
-                  totalEarnings: (agent.totalEarnings || 0) + content.price,
-                });
-              }
-            } catch (e) {
-              console.error("Failed to credit agent balance:", e);
-            }
-
-            grantAccess(shareCode!, accessDuration);
-            setStep("success");
-            setTimeout(() => {
-              setStep("watching");
-              setTimeLeft(accessDuration * 60);
-            }, 2000);
-          } catch (err: any) {
-            toast({ title: "Error", description: err.message, variant: "destructive" });
-            setStep("payment");
-          }
-        },
-        (errorMsg) => {
-          toast({ title: "Payment failed", description: errorMsg, variant: "destructive" });
-          setStep("payment");
-        },
-        60,
-        5000
-      );
+      // Grant temporary access locally and open checkout
+      window.open(result.checkoutUrl, "_blank", "noopener,noreferrer");
+      setStatusMessage("Complete payment in the new tab. Access will be granted automatically when you return.");
+      toast({ title: "Payment page opened", description: "Complete payment in the tab that just opened." });
+      setStep("payment");
     } catch (err: any) {
       toast({ title: "Error", description: err.message, variant: "destructive" });
       setStep("payment");

@@ -22,6 +22,7 @@ import AdminDashboard from "./pages/AdminDashboard";
 import SectionPage from "./pages/SectionPage";
 import HowToUse from "./pages/HowToUse";
 import NotFound from "./pages/NotFound";
+import PaymentCallback from "./pages/PaymentCallback";
 
 const queryClient = new QueryClient();
 
@@ -48,6 +49,7 @@ const AppLayout = () => {
         <Route path="/section/:sectionId" element={<SectionPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/how-to-use" element={<HowToUse />} />
+        <Route path="/payment/callback" element={<PaymentCallback />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {!isAudiencePage && <BottomNav />}
