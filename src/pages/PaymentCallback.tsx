@@ -100,26 +100,50 @@ const PaymentCallback = () => {
           } as any);
           setMessage(`Your Agent ID is being created. Please log in with your Agent ID to access the dashboard.`);
 
-        } else if (type === "agent-renew" && agentDocId) {
-          // Agent plan renewal
-          await updateAgent(agentDocId, {
-            status: "active",
-            planExpiry: expiryStr,
-            plan,
-          });
+        } else if (type === "audience" && shareCode) {
+          // Audience paying for agent content
+          const price = parseInt(params.get("price") || "0");
+          const accessDurationMins = parseInt(params.get("accessDuration") || "60");
+          const agentDocId2 = params.get("agentDocId") || "";
+          const contentTitle = params.get("contentTitle") || "Content";
+
+          // Grant localStorage access
+          const accessKey = `luo_access_${shareCode}`;
+          const deviceId = (() => {
+            let id = localStorage.getItem("luo_device_id");
+            if (!id) { id = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`; localStorage.setItem("luo_device_id", id); }
+            return id;
+          })();
+          localStorage.setItem(accessKey, JSON.stringify({ deviceId, expiresAt: Date.now() + accessDurationMins * 60 * 1000 }));
+
+          // Record transaction & credit agent
           await addTransaction({
-            userId: agentDocId,
-            userName: agentName || "Agent",
-            userPhone: agentPhone,
-            type: "subscription",
-            amount,
+            userId: deviceId,
+            userName: "Audience",
+            userPhone: "",
+            type: "agent-share",
+            amount: price,
             status: "completed",
             method: "Fincra Checkout (UGX)",
-            description: `Agent Renewal: ${plan}`,
+            description: `Agent sell: ${contentTitle}`,
             livraRef: ref,
             createdAt: nowStr,
           } as any);
-          setMessage("Your agent subscription has been renewed!");
+
+          if (agentDocId2) {
+            const { getAgentByDocId, updateAgent: ua } = await import("@/lib/firebaseServices") as any;
+            try {
+              const agent = getAgentByDocId ? await getAgentByDocId(agentDocId2) : null;
+              if (agent) {
+                await ua(agentDocId2, { balance: (agent.balance || 0) + price, totalEarnings: (agent.totalEarnings || 0) + price });
+              }
+            } catch {}
+          }
+
+          setMessage("Access granted! You can now watch the content.");
+          // Redirect back to audience page
+          setTimeout(() => navigate(`/a/${shareCode}`), 2000);
+
         }
 
         setState("success");
