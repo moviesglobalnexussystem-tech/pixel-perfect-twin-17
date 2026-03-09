@@ -13,7 +13,7 @@ import {
 import type { SharedLink } from "@/lib/firebaseServices";
 import type { MovieItem } from "@/data/adminData";
 import ArtPlayerComponent from "@/components/ArtPlayerComponent";
-import { requestDeposit, pollPaymentStatus } from "@/lib/livraPayment";
+import { createCheckout } from "@/lib/livraPayment";
 
 // Device fingerprint for audience "login"
 const getDeviceId = (): string => {
