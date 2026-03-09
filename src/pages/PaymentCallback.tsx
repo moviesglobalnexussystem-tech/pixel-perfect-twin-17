@@ -32,6 +32,7 @@ const PaymentCallback = () => {
       const agentDocId = params.get("agentId") || "";
       const agentName = params.get("agentName") || "";
       const agentPhone = params.get("agentPhone") || "";
+      const shareCodeParam = params.get("shareCode") || "";
 
       if (status !== "success") {
         setState("failed");
