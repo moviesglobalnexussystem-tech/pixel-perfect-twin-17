@@ -48,6 +48,7 @@ const AppLayout = () => {
         <Route path="/section/:sectionId" element={<SectionPage />} />
         <Route path="/admin" element={<AdminDashboard />} />
         <Route path="/how-to-use" element={<HowToUse />} />
+        <Route path="/payment/callback" element={<PaymentCallback />} />
         <Route path="*" element={<NotFound />} />
       </Routes>
       {!isAudiencePage && <BottomNav />}
