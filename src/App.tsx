@@ -21,7 +21,7 @@ import SharedContent from "./pages/SharedContent";
 import AdminDashboard from "./pages/AdminDashboard";
 import SectionPage from "./pages/SectionPage";
 import HowToUse from "./pages/HowToUse";
-import NotFound from "./pages/NotFound";
+import PaymentCallback from "./pages/PaymentCallback";
 
 const queryClient = new QueryClient();
 
