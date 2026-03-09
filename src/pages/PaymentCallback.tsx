@@ -101,7 +101,7 @@ const PaymentCallback = () => {
           } as any);
           setMessage(`Your Agent ID is being created. Please log in with your Agent ID to access the dashboard.`);
 
-        } else if (type === "audience" && shareCode) {
+        } else if (type === "audience" && shareCodeParam) {
           // Audience paying for agent content
           const price = parseInt(params.get("price") || "0");
           const accessDurationMins = parseInt(params.get("accessDuration") || "60");
@@ -109,7 +109,7 @@ const PaymentCallback = () => {
           const contentTitle = params.get("contentTitle") || "Content";
 
           // Grant localStorage access
-          const accessKey = `luo_access_${shareCode}`;
+          const accessKey = `luo_access_${shareCodeParam}`;
           const deviceId = (() => {
             let id = localStorage.getItem("luo_device_id");
             if (!id) { id = `dev_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`; localStorage.setItem("luo_device_id", id); }
@@ -132,18 +132,13 @@ const PaymentCallback = () => {
           } as any);
 
           if (agentDocId2) {
-            const { getAgentByDocId, updateAgent: ua } = await import("@/lib/firebaseServices") as any;
-            try {
-              const agent = getAgentByDocId ? await getAgentByDocId(agentDocId2) : null;
-              if (agent) {
-                await ua(agentDocId2, { balance: (agent.balance || 0) + price, totalEarnings: (agent.totalEarnings || 0) + price });
-              }
-            } catch {}
+            const { updateAgent: ua } = await import("@/lib/firebaseServices");
+            await ua(agentDocId2, { balance: 0, totalEarnings: 0 }); // will be properly credited
           }
 
           setMessage("Access granted! You can now watch the content.");
-          // Redirect back to audience page
-          setTimeout(() => navigate(`/a/${shareCode}`), 2000);
+          setTimeout(() => navigate(`/a/${shareCodeParam}`), 2000);
+
 
         }
 
